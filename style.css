@@ -55,7 +55,7 @@ main { padding-top: 14px; padding-bottom: 24px; }
 .brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .brand h1 { font-size: 17px; font-weight: 700; white-space: nowrap; }
 .brand .muted { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.logo { color: var(--accent); font-size: 15px; }
+.logo { width: 24px; height: 24px; align-self: center; flex: none; }
 nav { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
 nav::-webkit-scrollbar { display: none; }
 nav button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 10px 10px; cursor: pointer; color: var(--text-2); white-space: nowrap; font-weight: 550; }
