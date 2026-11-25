@@ -468,14 +468,50 @@ for (const ev of ['pointerover', 'focusin']) document.addEventListener(ev, e => 
 document.addEventListener('pointerout', e => { if (e.target.closest?.('[data-tip]') && !e.relatedTarget?.closest?.('[data-tip]')) hideTip(); });
 addEventListener('scroll', hideTip, {passive: true});
 
-function setTab(t) {
+function setTab(t, dir = 0) {
   if (!TABS[t]) t = 'overview';
   const changed = state.tab !== t;
   state.tab = t;
   if (location.hash.slice(1) !== t) history.replaceState(null, '', '#' + t);
   if (changed) scrollTo(0, 0);
   if (data) render();
+  if (changed) {
+    document.querySelector(`nav [data-tab="${t}"]`)?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+    if (dir) {
+      app.classList.remove('slide-l', 'slide-r');
+      void app.offsetWidth;
+      app.classList.add(dir > 0 ? 'slide-l' : 'slide-r');
+    }
+  }
 }
+
+// Боковые свайпы: влево — следующая вкладка, вправо — предыдущая.
+// Жест игнорируется, если начат внутри горизонтально прокручиваемого блока.
+const scrollsX = el => {
+  for (; el && el !== document.body; el = el.parentElement) {
+    const ox = getComputedStyle(el).overflowX;
+    if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 1) return true;
+  }
+  return false;
+};
+let swipe = null;
+document.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  swipe = e.touches.length === 1 && !scrollsX(e.target) && !e.target.closest('input, select, textarea')
+    ? {x: t.clientX, y: t.clientY, at: Date.now()} : null;
+}, {passive: true});
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) swipe = null; }, {passive: true});
+document.addEventListener('touchend', e => {
+  if (!swipe) return;
+  const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y, dt = Date.now() - swipe.at;
+  swipe = null;
+  if (dt > 600 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  const keys = Object.keys(TABS), i = keys.indexOf(state.tab) + (dx < 0 ? 1 : -1);
+  if (i < 0 || i >= keys.length) return;
+  hideTip();
+  setTab(keys[i], dx < 0 ? 1 : -1);
+}, {passive: true});
+app.addEventListener('animationend', () => app.classList.remove('slide-l', 'slide-r'));
 document.querySelectorAll('nav [data-tab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 addEventListener('hashchange', () => setTab(location.hash.slice(1)));
 setTab(location.hash.slice(1) || 'overview');
