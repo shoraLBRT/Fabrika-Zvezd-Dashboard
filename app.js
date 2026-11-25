@@ -485,16 +485,27 @@ function setTab(t, dir = 0) {
   if (data) render();
   if (changed) {
     document.querySelector(`nav [data-tab="${t}"]`)?.scrollIntoView({block: 'nearest', inline: 'nearest'});
-    if (dir) {
-      app.classList.remove('slide-l', 'slide-r');
-      void app.offsetWidth;
-      app.classList.add(dir > 0 ? 'slide-l' : 'slide-r');
-    }
+    if (dir) slideIn(dir);
   }
 }
 
-// Боковые свайпы: влево — следующая вкладка, вправо — предыдущая.
+// ---------- Свайпы между вкладками ----------
+// Содержимое едет за пальцем; отпустили дальше четверти экрана (или резким движением) — переход,
+// иначе возвращается на место. На краях (первая/последняя вкладка) — тугое сопротивление.
 // Жест игнорируется, если начат внутри горизонтально прокручиваемого блока.
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const EASE = 'cubic-bezier(.2,.7,.3,1)';
+const setX = (x, op = 1, ms = 0) => {
+  app.style.transition = ms ? `transform ${ms}ms ${EASE}, opacity ${ms}ms ${EASE}` : 'none';
+  app.style.transform = x ? `translateX(${x}px)` : '';
+  app.style.opacity = op < 1 ? op : '';
+};
+function slideIn(dir) {
+  if (reduceMotion.matches) return setX(0);
+  setX(dir * innerWidth * 0.3, 0);
+  void app.offsetWidth;
+  setX(0, 1, 260);
+}
 const scrollsX = el => {
   for (; el && el !== document.body; el = el.parentElement) {
     const ox = getComputedStyle(el).overflowX;
@@ -502,24 +513,45 @@ const scrollsX = el => {
   }
   return false;
 };
+const neighbour = dir => { const keys = Object.keys(TABS); return keys[keys.indexOf(state.tab) + dir]; };
+const peek = t => document.querySelectorAll('nav [data-tab]').forEach(b => b.classList.toggle('peek', b.dataset.tab === t));
 let swipe = null;
 document.addEventListener('touchstart', e => {
   const t = e.touches[0];
   swipe = e.touches.length === 1 && !scrollsX(e.target) && !e.target.closest('input, select, textarea')
-    ? {x: t.clientX, y: t.clientY, at: Date.now()} : null;
+    ? {x: t.clientX, y: t.clientY, at: Date.now(), lock: null, dx: 0} : null;
 }, {passive: true});
-document.addEventListener('touchmove', e => { if (e.touches.length > 1) swipe = null; }, {passive: true});
-document.addEventListener('touchend', e => {
+document.addEventListener('touchmove', e => {
   if (!swipe) return;
-  const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y, dt = Date.now() - swipe.at;
-  swipe = null;
-  if (dt > 600 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-  const keys = Object.keys(TABS), i = keys.indexOf(state.tab) + (dx < 0 ? 1 : -1);
-  if (i < 0 || i >= keys.length) return;
-  hideTip();
-  setTab(keys[i], dx < 0 ? 1 : -1);
-}, {passive: true});
-app.addEventListener('animationend', () => app.classList.remove('slide-l', 'slide-r'));
+  if (e.touches.length > 1) { if (swipe.lock === 'x') setX(0, 1, 200); swipe = null; return; }
+  const t = e.touches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
+  if (!swipe.lock) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    swipe.lock = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y';
+    if (swipe.lock === 'x') hideTip();
+  }
+  if (swipe.lock !== 'x') return;
+  e.preventDefault(); // не даём странице скроллиться, пока тянем вбок
+  swipe.dx = dx;
+  const target = neighbour(dx < 0 ? 1 : -1);
+  const x = target ? dx : dx / 4; // на краю — сопротивление
+  setX(x, 1 - Math.min(Math.abs(x) / innerWidth, 1) * 0.5);
+  peek(target && Math.abs(dx) > innerWidth * 0.25 ? target : null);
+}, {passive: false});
+const endSwipe = cancelled => {
+  if (!swipe) return;
+  const {dx, at, lock} = swipe;
+  swipe = null; peek(null);
+  if (lock !== 'x') return;
+  const dir = dx < 0 ? 1 : -1, target = neighbour(dir);
+  const fast = Math.abs(dx) / (Date.now() - at) > 0.5 && Math.abs(dx) > 40;
+  if (cancelled || !target || !(Math.abs(dx) > innerWidth * 0.25 || fast)) return setX(0, 1, 220);
+  if (reduceMotion.matches) return setTab(target);
+  setX(-dir * innerWidth, 0, 160);
+  setTimeout(() => setTab(target, dir), 160);
+};
+document.addEventListener('touchend', () => endSwipe(false), {passive: true});
+document.addEventListener('touchcancel', () => endSwipe(true), {passive: true});
 document.querySelectorAll('nav [data-tab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 addEventListener('hashchange', () => setTab(location.hash.slice(1)));
 setTab(location.hash.slice(1) || 'overview');
