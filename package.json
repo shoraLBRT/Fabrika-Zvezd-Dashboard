@@ -1,1 +1,1 @@
-{"private":true,"type":"module","scripts":{"test":"node tests/logic.test.mjs"}}
+{"private":true,"type":"module","scripts":{"test":"node tests/logic.test.mjs && node tests/export.test.mjs","export":"node scripts/export.mjs ../Fabrika-Zvezd data.json"}}

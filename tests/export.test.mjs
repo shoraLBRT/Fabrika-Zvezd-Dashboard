@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {mkdtempSync, mkdirSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {buildSnapshot, parseFrontMatter, validate} from '../scripts/export.mjs';
+
+const root = mkdtempSync(join(tmpdir(), 'cos-'));
+mkdirSync(join(root, 'content')); mkdirSync(join(root, 'data'));
+const md = fm => '---\n' + Object.entries(fm).map(([k, v]) => `"${k}": ${JSON.stringify(v)}`).join('\n') + '\n---\n\n# Текст\n\nСекретный черновик';
+writeFileSync(join(root, 'content', 'a.md'), md({id: 'a', 'Название': 'А', 'Тематика': 'X', 'Статус': 'Идея', 'Источник идеи': 'личное', 'Серия': ['s']}));
+writeFileSync(join(root, 'data', 'publications.json'), JSON.stringify([
+  {id: 'p1', 'Материал': ['a'], 'Площадка': 'Telegram', 'Статус': 'Опубликовано', 'Дата публикации': '2026-11-23', 'Примечания': 'Дата приблизительная'},
+  {id: 'p2', 'Материал': ['a'], 'Площадка': 'Threads', 'Статус': 'Запланировано', 'Плановая дата': '2026-11-30', 'Обоснование даты': 'внутреннее'},
+]));
+writeFileSync(join(root, 'data', 'goals.json'), JSON.stringify([{id: 'g', 'Тип': 'Площадка', 'Активна': true, 'Площадка': 'Telegram', 'Целевое количество': 2, 'Цель': 'текст', created_at: 'x'}]));
+writeFileSync(join(root, 'data', 'series.json'), JSON.stringify([{id: 's', 'Название': 'S', Content: ['a'], 'Концепция': 'внутреннее'}]));
+
+const s = buildSnapshot(root);
+const text = JSON.stringify(s);
+for (const secret of ['Источник идеи', 'личное', 'Примечания', 'Обоснование даты', 'Концепция', 'Секретный черновик', 'created_at']) assert.ok(!text.includes(secret), 'утечка: ' + secret);
+assert.equal(s.publications[0].approximate, true);
+assert.equal(s.publications[1]['Плановая дата'], '2026-11-30');
+assert.equal(s.publications[1].approximate, undefined);
+
+assert.deepEqual(parseFrontMatter('---\n"id": "x"\n"n": 1\n---\ntext'), {id: 'x', n: 1});
+assert.throws(() => validate({content: [], goals: [], series: [], publications: [{id: 'p', 'Материал': ['нет']}]}), /несуществующий/);
+assert.throws(() => validate({content: [{id: 'a'}], goals: [], series: [], publications: [{id: 'p', 'Материал': ['a'], 'Статус': 'Запланировано'}]}), /без плановой даты/);
+console.log('OK export');

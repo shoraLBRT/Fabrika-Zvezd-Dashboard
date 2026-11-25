@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *' # ежечасно подтягивать свежие данные из Content OS
 permissions:
   contents: read
   actions: read
@@ -14,12 +16,24 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_CONTENT_OS: ${{ secrets.CONTENT_OS_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm test
+      # Свежий снимок из приватного Content OS (только разрешённые поля, см. scripts/export.mjs).
+      # Без секрета CONTENT_OS_TOKEN используется закоммиченный data.json.
+      - if: env.HAS_CONTENT_OS == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: shoraLBRT/Fabrika-Zvezd
+          token: ${{ secrets.CONTENT_OS_TOKEN }}
+          path: content-os
+      - if: env.HAS_CONTENT_OS == 'true'
+        run: node scripts/export.mjs content-os data.json && rm -rf content-os
       - run: |
           mkdir -p site
           cp index.html style.css app.js logic.js data.json site/

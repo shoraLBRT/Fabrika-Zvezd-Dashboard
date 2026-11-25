@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {week, range, selectPubs, balance, daysBetween, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds} from '../logic.js';
+import {week, range, selectPubs, balance, daysBetween, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds, selectPlanned, channelOf, themeByChannel} from '../logic.js';
 
 assert.deepEqual(week(new Date(2026, 10, 25)), ['2026-11-23', '2026-11-29']);
 assert.deepEqual(week(new Date(2026, 10, 29)), ['2026-11-23', '2026-11-29']);
@@ -52,5 +52,16 @@ assert.deepEqual(periodBounds('month', 2, d), ['2027-01-01', '2027-01-31']);
 assert.deepEqual(periodBounds('quarter', 0, d), ['2026-10-01', '2026-12-31']);
 assert.deepEqual(periodBounds('quarter', -4, d), ['2025-10-01', '2025-12-31']);
 assert.deepEqual(periodBounds('year', -1, d), ['2025-01-01', '2025-12-31']);
+
+const plan = [{'Статус': 'Запланировано', 'Плановая дата': '2026-11-28'}, {'Статус': 'Запланировано'}, {'Статус': 'Опубликовано', 'Плановая дата': '2026-11-28'}];
+assert.equal(selectPlanned(plan).length, 1);
+assert.equal(selectPlanned(plan, '2026-11-29').length, 0);
+assert.equal(channelOf('YouTube Shorts'), 'Короткие видео');
+assert.equal(channelOf('Telegram'), 'Telegram');
+// кросспост Reels + Shorts — один материал в канале «Короткие видео»
+const tc = themeByChannel([{id: 'a', 'Тематика': 'X'}, {id: 'b', 'Тематика': 'Y'}], [
+  {'Площадка': 'Instagram Reels', 'Материал': ['a']}, {'Площадка': 'YouTube Shorts', 'Материал': ['a']}, {'Площадка': 'Telegram', 'Материал': ['a']}, {'Площадка': 'Telegram', 'Материал': ['b']}]);
+assert.deepEqual(tc.cells, {X: {'Короткие видео': 1, Telegram: 1}, Y: {Telegram: 1}});
+assert.deepEqual(tc.totals, {'Короткие видео': 1, Telegram: 2});
 
 console.log('OK');

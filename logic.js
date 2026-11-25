@@ -83,3 +83,31 @@ export function periodBounds(unit, offset, d) {
   if (unit === 'quarter') { const q = Math.floor(m / 3) + offset; return [dateKey(new Date(y, q * 3, 1)), dateKey(new Date(y, q * 3 + 3, 0))]; }
   return [dateKey(new Date(y + offset, 0, 1)), dateKey(new Date(y + offset, 11, 31))];
 }
+
+/** Запланированные (ещё не вышедшие) публикации по плановой дате в диапазоне. */
+export function selectPlanned(p, a = '', b = '') {
+  return p.filter(x => x['Статус'] === 'Запланировано' && x['Плановая дата'] && (!a || x['Плановая дата'] >= a) && (!b || x['Плановая дата'] <= b));
+}
+
+/** Канал = группа площадок с общей аудиторной ролью. Короткие видео обычно кросспостятся, поэтому это один канал. */
+export const CHANNELS = ['Telegram', 'Threads', 'Короткие видео'];
+export const channelOf = platform => ['Instagram Reels', 'YouTube Shorts', 'TikTok'].includes(platform) ? 'Короткие видео' : platform;
+
+/** Матрица «тематика × канал»: число уникальных материалов, вышедших в канале. */
+export function themeByChannel(content, pubs) {
+  const byId = new Map(content.map(c => [c.id, c]));
+  const seen = new Set(), cells = {}, totals = {};
+  for (const p of pubs) {
+    const ch = channelOf(p['Площадка']);
+    for (const id of p['Материал'] || []) {
+      const key = ch + '|' + id;
+      const theme = byId.get(id)?.['Тематика'];
+      if (seen.has(key) || !theme) continue;
+      seen.add(key);
+      cells[theme] ??= {};
+      cells[theme][ch] = (cells[theme][ch] || 0) + 1;
+      totals[ch] = (totals[ch] || 0) + 1;
+    }
+  }
+  return {cells, totals};
+}
