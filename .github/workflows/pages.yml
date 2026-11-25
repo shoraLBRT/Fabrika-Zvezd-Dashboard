@@ -37,6 +37,10 @@ jobs:
       - run: |
           mkdir -p site
           cp index.html style.css app.js logic.js data.json site/
+          # Версия в ссылках на файлы, чтобы браузер не показывал старую версию из кэша.
+          v=${GITHUB_SHA::8}
+          sed -i "s/style\.css\"/style.css?v=$v\"/; s/app\.js\"/app.js?v=$v\"/" site/index.html
+          sed -i "s#'./logic\.js'#'./logic.js?v=$v'#" site/app.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
