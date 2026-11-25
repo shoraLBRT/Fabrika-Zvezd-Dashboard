@@ -38,6 +38,22 @@ export function parseFrontMatter(text) {
 /** Дата считается приблизительной по явному полю или по пометке в примечаниях (правило 05). */
 export const isApproximate = p => p['Дата приблизительная'] === true || (p['Дата приблизительная'] !== false && /приблизительн/i.test(p['Примечания'] || ''));
 
+/**
+ * Неразобранные посты из data/inbox.json (раздел 17 Content OS): выход подтверждён API, но материал ещё не назначен.
+ * В дашборд попадают как публикации без материала — считаются в активности площадок, но не в тематическом балансе.
+ * Текст поста не экспортируется; «Игнорировать» (анонсы, служебное) пропускаются.
+ */
+export function unsortedPubs(inbox) {
+  return inbox.filter(x => x['Решение'] !== 'Игнорировать' && x['Площадка'] && /^\d{4}-\d{2}-\d{2}$/.test(x['Дата публикации'] || '')).map(x => ({
+    id: 'inbox:' + (x.key || x['Площадка'] + ':' + x['Внешний id']),
+    'Публикация': 'Не разобранный пост',
+    'Площадка': x['Площадка'],
+    'Дата публикации': x['Дата публикации'],
+    'Статус': 'Опубликовано',
+    unsorted: true,
+  }));
+}
+
 /** Публичная часть статистики. Ссылка на публикацию — только если она есть в снимке. */
 export function buildStats(m, pubIds) {
   const num = o => Object.fromEntries(Object.entries(o || {}).filter(([, v]) => typeof v === 'number' && Number.isFinite(v)));
@@ -61,10 +77,12 @@ export function buildSnapshot(root) {
     if (p['Дата публикации'] && isApproximate(p)) x.approximate = true;
     return x;
   });
+  const inboxFile = join(root, 'data', 'inbox.json');
+  const unsorted = existsSync(inboxFile) ? unsortedPubs(JSON.parse(readFileSync(inboxFile, 'utf8'))) : [];
   const snapshot = {
     content,
     goals: read('goals.json').map(g => pick(g, ALLOW.goals)),
-    publications,
+    publications: [...publications, ...unsorted],
     series: read('series.json').map(s => pick(s, ALLOW.series)),
   };
   validate(snapshot);
@@ -84,6 +102,7 @@ export function validate(s) {
   }
   const ref = (from, id, kind) => { if (ids.get(id) !== kind) errors.push(`${from}: ссылка на несуществующий ${kind} ${id}`); };
   for (const p of s.publications) {
+    if (p.unsorted) continue;
     if (!p['Материал']?.length) errors.push(`публикация ${p.id} без материала`);
     for (const id of p['Материал'] || []) ref(`публикация ${p.id}`, id, 'content');
     if (p['Статус'] === 'Запланировано' && !p['Плановая дата']) errors.push(`публикация ${p.id}: запланирована без плановой даты`);
@@ -99,5 +118,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (!root) { console.error('Укажите путь к репозиторию Fabrika-Zvezd'); process.exit(2); }
   const s = buildSnapshot(root);
   writeFileSync(out, JSON.stringify(s, null, 2) + '\n');
-  console.log(`Экспорт: ${s.content.length} материалов, ${s.publications.length} публикаций, ${s.goals.length} целей, ${s.series.length} серий${s.stats ? `, статистика: ${Object.keys(s.stats.accounts).join(', ') || 'пусто'}` : ''} → ${out}`);
+  console.log(`Экспорт: ${s.content.length} материалов, ${s.publications.length} публикаций (из них не разобрано ${s.publications.filter(p => p.unsorted).length}), ${s.goals.length} целей, ${s.series.length} серий${s.stats ? `, статистика: ${Object.keys(s.stats.accounts).join(', ') || 'пусто'}` : ''} → ${out}`);
 }

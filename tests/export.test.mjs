@@ -18,12 +18,17 @@ writeFileSync(join(root, 'data', 'series.json'), JSON.stringify([{id: 's', 'На
 writeFileSync(join(root, 'data', 'metrics.json'), JSON.stringify({updated_at: 't', accounts: {Telegram: [{date: '2026-11-25', followers: 10, views: 50, posts: 2, secret: 'x'}]},
   posts: [{key: 'Telegram:1', 'Площадка': 'Telegram', 'Дата': '2026-11-23', 'Ссылка': 'https://t.me/c/1', 'Публикация': 'p1', metrics: {views: 40, text: 'Секретный черновик'}},
     {key: 'Telegram:2', 'Площадка': 'Telegram', 'Дата': '2026-11-24', 'Ссылка': 'javascript:alert(1)', 'Публикация': 'нет', metrics: {views: 10}}]}));
+writeFileSync(join(root, 'data', 'inbox.json'), JSON.stringify([
+  {key: 'Threads:9', 'Площадка': 'Threads', 'Дата публикации': '2026-11-24', 'Ссылка': 'https://www.threads.com/p/9', 'Внешний id': '9', 'Текст': 'Секретный черновик', 'Похожие публикации': []},
+  {key: 'Threads:10', 'Площадка': 'Threads', 'Дата публикации': '2026-11-24', 'Текст': 'анонс', 'Решение': 'Игнорировать'},
+]));
 const s = buildSnapshot(root);
 const text = JSON.stringify(s);
 for (const secret of ['Источник идеи', 'личное', 'Примечания', 'Обоснование даты', 'Концепция', 'Секретный черновик', 'created_at']) assert.ok(!text.includes(secret), 'утечка: ' + secret);
 assert.equal(s.publications[0].approximate, true);
 assert.equal(s.publications[1]['Плановая дата'], '2026-11-30');
 assert.equal(s.publications[1].approximate, undefined);
+assert.deepEqual(s.publications.filter(p => p.unsorted), [{id: 'inbox:Threads:9', 'Публикация': 'Не разобранный пост', 'Площадка': 'Threads', 'Дата публикации': '2026-11-24', 'Статус': 'Опубликовано', unsorted: true}], 'очередь: без текста, без игнорируемых');
 
 assert.deepEqual(s.stats.accounts.Telegram, [{date: '2026-11-25', followers: 10, views: 50, posts: 2}]);
 assert.deepEqual(s.stats.posts[0], {'Площадка': 'Telegram', 'Дата': '2026-11-23', 'Ссылка': 'https://t.me/c/1', 'Публикация': 'p1', metrics: {views: 40}});
