@@ -20,16 +20,17 @@ export const STATS = {
 
 const pick = (obj, keys) => Object.fromEntries(keys.filter(k => obj[k] !== undefined && obj[k] !== '' && obj[k] !== null).map(k => [k, obj[k]]));
 
-/** Front matter content/*.md: строки вида "ключ": JSON-значение. */
+/** Front matter content/*.md: строки вида "ключ": JSON-значение (допускается и ключ без кавычек). */
 export function parseFrontMatter(text) {
-  const m = text.match(/^---\n([\s\S]*?)\n---/);
+  const m = text.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/);
   if (!m) throw Error('нет front matter');
   const out = {};
   for (const line of m[1].split('\n')) {
     if (!line.trim()) continue;
-    const i = line.indexOf('":');
-    if (!line.startsWith('"') || i < 0) throw Error('строка не в формате "ключ": значение — ' + line);
-    out[line.slice(1, i)] = JSON.parse(line.slice(i + 2).trim());
+    const q = line.match(/^"([^"]+)":\s*(.*)$/) || line.match(/^([^":][^:]*):\s*(.*)$/);
+    if (!q) throw Error('строка не в формате "ключ": значение — ' + line);
+    try { out[q[1].trim()] = JSON.parse(q[2].trim()); }
+    catch { throw Error(`значение не JSON — ${line}`); }
   }
   return out;
 }
@@ -54,7 +55,7 @@ export function buildStats(m, pubIds) {
 export function buildSnapshot(root) {
   const read = f => JSON.parse(readFileSync(join(root, 'data', f), 'utf8'));
   const content = readdirSync(join(root, 'content')).filter(f => f.endsWith('.md')).sort()
-    .map(f => pick(parseFrontMatter(readFileSync(join(root, 'content', f), 'utf8')), ALLOW.content));
+    .map(f => { try { return pick(parseFrontMatter(readFileSync(join(root, 'content', f), 'utf8')), ALLOW.content); } catch (e) { throw Error(`content/${f}: ${e.message}`); } });
   const publications = read('publications.json').map(p => {
     const x = pick(p, ALLOW.publications);
     if (p['Дата публикации'] && isApproximate(p)) x.approximate = true;

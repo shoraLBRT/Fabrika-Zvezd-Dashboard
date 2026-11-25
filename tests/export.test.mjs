@@ -30,6 +30,8 @@ assert.deepEqual(s.stats.posts[0], {'Площадка': 'Telegram', 'Дата': 
 assert.deepEqual(s.stats.posts[1], {'Площадка': 'Telegram', 'Дата': '2026-11-24', metrics: {views: 10}});
 assert.equal(isApproximate({'Дата приблизительная': false, 'Примечания': 'Дата приблизительная'}), false, 'уточнено по API');
 assert.deepEqual(parseFrontMatter('---\n"id": "x"\n"n": 1\n---\ntext'), {id: 'x', n: 1});
+assert.deepEqual(parseFrontMatter('---\r\nid: "x"\r\nИсточник идеи: "a: b"\r\nЦелевые площадки: ["Telegram"]\r\n---\r\ntext'), {id: 'x', 'Источник идеи': 'a: b', 'Целевые площадки': ['Telegram']}, 'ключи без кавычек');
+assert.throws(() => parseFrontMatter('---\nid: x\n---'), /не JSON/);
 assert.throws(() => validate({content: [], goals: [], series: [], publications: [{id: 'p', 'Материал': ['нет']}]}), /несуществующий/);
 assert.throws(() => validate({content: [{id: 'a'}], goals: [], series: [], publications: [{id: 'p', 'Материал': ['a'], 'Статус': 'Запланировано'}]}), /без плановой даты/);
 console.log('OK export');
