@@ -83,3 +83,12 @@ console.log('OK');
   assert.deepEqual(gains(L).map(x => x.followers), [4, -1, 7]);
   console.log('OK stats');
 }
+
+// Служебная тематика «Мусор»: не входит ни в баланс, ни в матрицу каналов.
+{
+  const c = [{id: 'a', 'Тематика': 'X'}, {id: 'm', 'Тематика': 'Мусор'}];
+  const ps = [{'Материал': ['a'], 'Площадка': 'Threads'}, {'Материал': ['m'], 'Площадка': 'Threads'}];
+  assert.equal(balance(c, ps, [{'Тематика': 'X', 'Целевая доля': 1}])[0].actual, 100, 'мусор не в знаменателе');
+  assert.deepEqual(themeByChannel(c, ps), {cells: {X: {Threads: 1}}, totals: {Threads: 1}});
+  console.log('OK hidden themes');
+}

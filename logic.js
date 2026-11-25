@@ -23,9 +23,16 @@ export function selectPubs(p, a, b) {
   return p.filter(x => x['Статус'] === 'Опубликовано' && (!(a || b) || x['Дата публикации'] && (!a || x['Дата публикации'] >= a) && (!b || x['Дата публикации'] <= b)));
 }
 
-/** Тематический баланс по уникальным материалам. gap = цель − факт, п.п. */
+/**
+ * Служебные тематики: материал учитывается в активности площадок, но не показывается в тематиках —
+ * ни в балансе, ни в банке идей, ни в истории. «Мусор» — лёгкие посты для охвата (в основном Threads).
+ */
+export const HIDDEN_THEMES = ['Мусор'];
+export const isHiddenTheme = name => HIDDEN_THEMES.includes(name);
+
+/** Тематический баланс по уникальным материалам. gap = цель − факт, п.п. Служебные тематики не входят в знаменатель. */
 export function balance(c, p, g) {
-  const ids = new Set(p.flatMap(x => x['Материал'] || [])), items = c.filter(x => ids.has(x.id));
+  const ids = new Set(p.flatMap(x => x['Материал'] || [])), items = c.filter(x => ids.has(x.id) && !isHiddenTheme(x['Тематика']));
   return g.map(x => {
     const name = x['Тематика'], target = x['Целевая доля'] * 100, count = items.filter(y => y['Тематика'] === name).length;
     const actual = items.length ? 100 * count / items.length : null;
@@ -102,7 +109,7 @@ export function themeByChannel(content, pubs) {
     for (const id of p['Материал'] || []) {
       const key = ch + '|' + id;
       const theme = byId.get(id)?.['Тематика'];
-      if (seen.has(key) || !theme) continue;
+      if (seen.has(key) || !theme || isHiddenTheme(theme)) continue;
       seen.add(key);
       cells[theme] ??= {};
       cells[theme][ch] = (cells[theme][ch] || 0) + 1;
