@@ -30,9 +30,16 @@ export function selectPubs(p, a, b) {
 export const HIDDEN_THEMES = ['Мусор'];
 export const isHiddenTheme = name => HIDDEN_THEMES.includes(name);
 
+/**
+ * Площадки, где всё по умолчанию «Мусор»: публикации считаются в активности площадки,
+ * но не дают материалу тематику — ни в балансе, ни в матрице каналов, ни в истории.
+ */
+export const TRASH_PLATFORMS = ['Threads'];
+export const isTrashPub = p => TRASH_PLATFORMS.includes(p['Площадка']);
+
 /** Тематический баланс по уникальным материалам. gap = цель − факт, п.п. Служебные тематики не входят в знаменатель. */
 export function balance(c, p, g) {
-  const ids = new Set(p.flatMap(x => x['Материал'] || [])), items = c.filter(x => ids.has(x.id) && !isHiddenTheme(x['Тематика']));
+  const ids = new Set(p.filter(x => !isTrashPub(x)).flatMap(x => x['Материал'] || [])), items = c.filter(x => ids.has(x.id) && !isHiddenTheme(x['Тематика']));
   return g.map(x => {
     const name = x['Тематика'], target = x['Целевая доля'] * 100, count = items.filter(y => y['Тематика'] === name).length;
     const actual = items.length ? 100 * count / items.length : null;
@@ -97,7 +104,7 @@ export function selectPlanned(p, a = '', b = '') {
 }
 
 /** Канал = группа площадок с общей аудиторной ролью. Короткие видео обычно кросспостятся, поэтому это один канал. */
-export const CHANNELS = ['Telegram', 'Threads', 'Короткие видео'];
+export const CHANNELS = ['Telegram', 'Короткие видео']; // Threads — мусорная площадка (TRASH_PLATFORMS)
 export const channelOf = platform => ['Instagram Reels', 'YouTube Shorts', 'TikTok'].includes(platform) ? 'Короткие видео' : platform;
 
 /** Матрица «тематика × канал»: число уникальных материалов, вышедших в канале. */
@@ -105,6 +112,7 @@ export function themeByChannel(content, pubs) {
   const byId = new Map(content.map(c => [c.id, c]));
   const seen = new Set(), cells = {}, totals = {};
   for (const p of pubs) {
+    if (isTrashPub(p)) continue;
     const ch = channelOf(p['Площадка']);
     for (const id of p['Материал'] || []) {
       const key = ch + '|' + id;
