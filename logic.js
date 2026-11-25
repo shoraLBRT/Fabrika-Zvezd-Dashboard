@@ -74,3 +74,12 @@ export function groupByMaterial(pubs) {
   const last = g => g.pubs.map(x => x['Дата публикации'] || '').sort().at(-1);
   return [...map.values()].sort((x, y) => last(y).localeCompare(last(x)));
 }
+
+/** Границы календарного периода со сдвигом: unit = 'week' | 'month' | 'quarter' | 'year', offset 0 — текущий. */
+export function periodBounds(unit, offset, d) {
+  if (unit === 'week') return week(shift(d, offset * 7));
+  const y = d.getFullYear(), m = d.getMonth();
+  if (unit === 'month') return [dateKey(new Date(y, m + offset, 1)), dateKey(new Date(y, m + offset + 1, 0))];
+  if (unit === 'quarter') { const q = Math.floor(m / 3) + offset; return [dateKey(new Date(y, q * 3, 1)), dateKey(new Date(y, q * 3 + 3, 0))]; }
+  return [dateKey(new Date(y + offset, 0, 1)), dateKey(new Date(y + offset, 11, 31))];
+}

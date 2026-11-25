@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {week, range, selectPubs, balance, daysBetween, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial} from '../logic.js';
+import {week, range, selectPubs, balance, daysBetween, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds} from '../logic.js';
 
 assert.deepEqual(week(new Date(2026, 10, 25)), ['2026-11-23', '2026-11-29']);
 assert.deepEqual(week(new Date(2026, 10, 29)), ['2026-11-23', '2026-11-29']);
@@ -42,5 +42,15 @@ const g = groupByMaterial(p.slice(0, 3));
 assert.equal(g.length, 2);
 assert.equal(g[0].id, 'a');
 assert.equal(g[0].pubs.length, 2);
+
+const d = new Date(2026, 10, 25);
+assert.deepEqual(periodBounds('week', 0, d), ['2026-11-23', '2026-11-29']);
+assert.deepEqual(periodBounds('week', -1, d), ['2026-11-16', '2026-11-22']);
+assert.deepEqual(periodBounds('month', 0, d), ['2026-11-01', '2026-11-30']);
+assert.deepEqual(periodBounds('month', -9, d), ['2026-02-01', '2026-02-28']);
+assert.deepEqual(periodBounds('month', 2, d), ['2027-01-01', '2027-01-31']);
+assert.deepEqual(periodBounds('quarter', 0, d), ['2026-10-01', '2026-12-31']);
+assert.deepEqual(periodBounds('quarter', -4, d), ['2025-10-01', '2025-12-31']);
+assert.deepEqual(periodBounds('year', -1, d), ['2025-01-01', '2025-12-31']);
 
 console.log('OK');
