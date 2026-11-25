@@ -83,6 +83,9 @@ const pct = x => x == null ? '0%' : num(x, 0) + '%';
 /** Доля тематики против цели — человеческими словами, с подсказкой. */
 const shareTip = (x, days) => `За ${days} дней на тематику пришлось ${pct(x.actual)} опубликованных материалов, а цель — ${pct(x.target)}.` + (x.deficit ? `\nНе хватает ${num(x.gap, 0)} процентных пунктов.` : '');
 const approxTip = 'Дата приблизительная';
+const UNSORTED_TIP = 'Пост пришёл из синхронизации с площадкой, но ещё не привязан к материалу в Content OS. В активности площадки учитывается, в тематическом балансе — нет.';
+/** Примечание о неразобранных постах: они есть в активности, но не в балансе. */
+const unsortedNote = pubs => { const n = pubs.filter(p => p.unsorted).length; return n ? `<p class="note muted" data-tip="${esc(UNSORTED_TIP)}" tabindex="0">+ ${pl(n, ['неразобранный пост', 'неразобранных поста', 'неразобранных постов'])} — не входят в баланс, пока им не назначена тематика</p>` : ''; };
 const empty = text => `<p class="empty">${text}</p>`;
 const segmented = (id, options, value) => `<div class="seg" role="group" id="${id}">${options.map(([v, n]) => `<button type="button" data-value="${v}" aria-pressed="${v === value}">${n}</button>`).join('')}</div>`;
 
@@ -323,7 +326,7 @@ function content() {
     const parts = g.pubs.length > 1 && new Set(g.pubs.map(p => p['Публикация'])).size > 1 ? ` · ${g.pubs.length} поста` : '';
     return `<li class="row pub">
       <span class="pub-d" ${approx ? `data-tip="${approxTip}" tabindex="0"` : ''}>${d ? (approx ? '≈' : '') + dShort(d) : '—'}</span>
-      <div class="row-main"><div class="row-t">${esc(c?.['Название'] || g.pubs[0]['Публикация'])}</div><div class="row-m">${esc(c?.['Тематика'] || '')}${parts}</div></div>
+      <div class="row-main"><div class="row-t ${g.pubs[0].unsorted ? 'muted' : ''}">${esc(c?.['Название'] || g.pubs[0]['Публикация'])}</div><div class="row-m">${g.pubs[0].unsorted ? `<span data-tip="${esc(UNSORTED_TIP)}" tabindex="0">тематика не назначена</span>` : esc(c?.['Тематика'] || '')}${parts}</div></div>
       <span class="pub-p">${[...new Set(g.pubs.map(p => p['Площадка']))].sort((x, y) => platformIdx(x) - platformIdx(y)).map(p => tag(p)).join('')}</span>
     </li>`;
   };
@@ -363,8 +366,8 @@ function analytics() {
     </tr>`;
   }).join('');
   const noFacts = future ? 'Будущий период — фактов ещё нет. Запланированное видно в «Динамике».' : 'За период нет опубликованных материалов';
-  const themeTable = uniq ? `<table class="tbl"><thead><tr><th>Тематика</th><th class="w"><span class="leg-fill"></span>факт <span class="leg-tick"></span>цель</th><th class="r">Факт</th><th class="r">Цель</th><th class="r">Разница</th></tr></thead><tbody>${themeRows}</tbody></table>`
-    : empty(noFacts);
+  const themeTable = (uniq ? `<table class="tbl"><thead><tr><th>Тематика</th><th class="w"><span class="leg-fill"></span>факт <span class="leg-tick"></span>цель</th><th class="r">Факт</th><th class="r">Цель</th><th class="r">Разница</th></tr></thead><tbody>${themeRows}</tbody></table>`
+    : empty(noFacts)) + unsortedNote(pubs);
 
   // Тематики × каналы: в каких каналах закрывается каждая тематика.
   const tc = themeByChannel(data.content, pubs);
