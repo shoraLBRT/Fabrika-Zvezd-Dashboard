@@ -1,4 +1,4 @@
-import {dateKey, parseKey, daysBetween, range, selectPubs, balance, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds, selectPlanned, CHANNELS, themeByChannel, accountPeriod, gains, isHiddenTheme} from './logic.js';
+import {dateKey, parseKey, daysBetween, range, selectPubs, balance, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds, selectPlanned, CHANNELS, themeByChannel, accountPeriod, gains, isHiddenTheme, isTrashPub} from './logic.js';
 
 // ---------- Константы ----------
 const TABS = {overview: 1, content: 1, analytics: 1, series: 1, stats: 1};
@@ -60,7 +60,7 @@ const planned = (a = '', b = '') => selectPlanned(data.publications, a, b).sort(
 const materialIds = p => new Set(p.flatMap(x => x['Материал'] || []));
 /** Материал служебной тематики («Мусор»): в активности площадок есть, в тематиках и истории не показывается. */
 const isHidden = id => isHiddenTheme(contentById(id)?.['Тематика']);
-const visibleIds = p => new Set([...materialIds(p)].filter(id => !isHidden(id)));
+const visibleIds = p => new Set([...materialIds(p.filter(x => !isTrashPub(x)))].filter(id => !isHidden(id)));
 const contentById = id => data.content.find(c => c.id === id);
 const trackingStart = () => published().map(p => p['Дата публикации']).filter(Boolean).sort()[0] || today();
 const pubDate = p => p['Дата публикации'] || p['Плановая дата'];
@@ -88,7 +88,7 @@ const shareTip = (x, days) => `За ${days} дней на тематику пр�
 const approxTip = 'Дата приблизительная';
 const UNSORTED_TIP = 'Пост пришёл из синхронизации с площадкой, но ещё не привязан к материалу в Content OS. В активности площадки учитывается, в тематическом балансе — нет.';
 /** Примечание о неразобранных постах: они есть в активности, но не в балансе. */
-const unsortedNote = pubs => { const n = pubs.filter(p => p.unsorted).length; return n ? `<p class="note muted" data-tip="${esc(UNSORTED_TIP)}" tabindex="0">+ ${pl(n, ['неразобранный пост', 'неразобранных поста', 'неразобранных постов'])} — не входят в баланс, пока им не назначена тематика</p>` : ''; };
+const unsortedNote = pubs => { const n = pubs.filter(p => p.unsorted && !isTrashPub(p)).length; return n ? `<p class="note muted" data-tip="${esc(UNSORTED_TIP)}" tabindex="0">+ ${pl(n, ['неразобранный пост', 'неразобранных поста', 'неразобранных постов'])} — не входят в баланс, пока им не назначена тематика</p>` : ''; };
 const empty = text => `<p class="empty">${text}</p>`;
 const segmented = (id, options, value) => `<div class="seg" role="group" id="${id}">${options.map(([v, n]) => `<button type="button" data-value="${v}" aria-pressed="${v === value}">${n}</button>`).join('')}</div>`;
 
@@ -265,7 +265,7 @@ function overview() {
 function content() {
   const st = state.content, t = today();
   const bank = ideaBank(), totalIdeas = bank.reduce((s, x) => s + x.ideas.length, 0);
-  const groups = groupByMaterial(published()).filter(g => !isHidden(g.id));
+  const groups = groupByMaterial(published().filter(p => !isTrashPub(p))).filter(g => !isHidden(g.id));
   const plans = planned();
   const seriesName = id => data.series.find(s => s.id === id)?.['Название'];
   const tabs = segmented('content-view', [['ideas', `Идеи · ${totalIdeas}`], ['plan', `План · ${plans.length}`], ['published', `Вышло · ${groups.length}`]], st.view);
@@ -316,7 +316,7 @@ function content() {
   }
 
   const filtered = groups.filter(g => !st.platform || g.pubs.some(p => p['Площадка'] === st.platform));
-  const platforms = [['', 'Все'], ...platformGoals().map(g => [g['Площадка'], `${dot(g['Площадка'])}${esc(short(g['Площадка']))}`])];
+  const platforms = [['', 'Все'], ...platformGoals().filter(g => !isTrashPub(g)).map(g => [g['Площадка'], `${dot(g['Площадка'])}${esc(short(g['Площадка']))}`])];
   const lastDate = g => g.pubs.map(p => p['Дата публикации'] || '').sort().at(-1);
   const byMonth = new Map();
   for (const g of filtered) {

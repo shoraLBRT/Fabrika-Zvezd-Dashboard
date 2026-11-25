@@ -87,8 +87,13 @@ console.log('OK');
 // Служебная тематика «Мусор»: не входит ни в баланс, ни в матрицу каналов.
 {
   const c = [{id: 'a', 'Тематика': 'X'}, {id: 'm', 'Тематика': 'Мусор'}];
-  const ps = [{'Материал': ['a'], 'Площадка': 'Threads'}, {'Материал': ['m'], 'Площадка': 'Threads'}];
+  const ps = [{'Материал': ['a'], 'Площадка': 'Telegram'}, {'Материал': ['m'], 'Площадка': 'Telegram'}];
   assert.equal(balance(c, ps, [{'Тематика': 'X', 'Целевая доля': 1}])[0].actual, 100, 'мусор не в знаменателе');
-  assert.deepEqual(themeByChannel(c, ps), {cells: {X: {Threads: 1}}, totals: {Threads: 1}});
+  assert.deepEqual(themeByChannel(c, ps), {cells: {X: {Telegram: 1}}, totals: {Telegram: 1}});
+  // Threads — мусорная площадка: материал, вышедший только там, тематику не получает.
+  const t = [{'Материал': ['a'], 'Площадка': 'Threads'}, {'Материал': ['b'], 'Площадка': 'Telegram'}];
+  const cb = [{id: 'a', 'Тематика': 'X'}, {id: 'b', 'Тематика': 'Y'}];
+  assert.deepEqual(balance(cb, t, [{'Тематика': 'X', 'Целевая доля': 0.5}, {'Тематика': 'Y', 'Целевая доля': 0.5}]).map(x => x.count), [0, 1]);
+  assert.deepEqual(themeByChannel(cb, t), {cells: {Y: {Telegram: 1}}, totals: {Telegram: 1}});
   console.log('OK hidden themes');
 }
