@@ -65,3 +65,21 @@ assert.deepEqual(tc.cells, {X: {'Короткие видео': 1, Telegram: 1}, 
 assert.deepEqual(tc.totals, {'Короткие видео': 1, Telegram: 2});
 
 console.log('OK');
+
+// Статистика аккаунтов
+{
+  const {accountPeriod, gains} = await import('../logic.js');
+  const L = [{date: '2026-11-20', followers: 100, views: 1000}, {date: '2026-11-22', followers: 104, views: 1300}, {date: '2026-11-23', followers: 103, views: 1290}, {date: '2026-11-25', followers: 110, views: 1500}];
+  const r = accountPeriod(L, '2026-11-22', '2026-11-25');
+  assert.equal(r.points.length, 3);
+  assert.equal(r.followersDelta, 10, 'от снимка до начала периода');
+  assert.equal(r.viewsGained, 500);
+  assert.equal(r.fromStart, false);
+  const all = accountPeriod(L);
+  assert.equal(all.followersDelta, 10);
+  assert.equal(all.fromStart, true);
+  assert.equal(accountPeriod([], '2026-11-01', '2026-11-30').followersDelta, null);
+  assert.deepEqual(gains(L).map(x => x.views), [300, 0, 210]);
+  assert.deepEqual(gains(L).map(x => x.followers), [4, -1, 7]);
+  console.log('OK stats');
+}

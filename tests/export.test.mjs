@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync, mkdirSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {buildSnapshot, parseFrontMatter, validate} from '../scripts/export.mjs';
+import {buildSnapshot, isApproximate, parseFrontMatter, validate} from '../scripts/export.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'cos-'));
 mkdirSync(join(root, 'content')); mkdirSync(join(root, 'data'));
@@ -15,6 +15,9 @@ writeFileSync(join(root, 'data', 'publications.json'), JSON.stringify([
 writeFileSync(join(root, 'data', 'goals.json'), JSON.stringify([{id: 'g', 'Тип': 'Площадка', 'Активна': true, 'Площадка': 'Telegram', 'Целевое количество': 2, 'Цель': 'текст', created_at: 'x'}]));
 writeFileSync(join(root, 'data', 'series.json'), JSON.stringify([{id: 's', 'Название': 'S', Content: ['a'], 'Концепция': 'внутреннее'}]));
 
+writeFileSync(join(root, 'data', 'metrics.json'), JSON.stringify({updated_at: 't', accounts: {Telegram: [{date: '2026-11-25', followers: 10, views: 50, posts: 2, secret: 'x'}]},
+  posts: [{key: 'Telegram:1', 'Площадка': 'Telegram', 'Дата': '2026-11-23', 'Ссылка': 'https://t.me/c/1', 'Публикация': 'p1', metrics: {views: 40, text: 'Секретный черновик'}},
+    {key: 'Telegram:2', 'Площадка': 'Telegram', 'Дата': '2026-11-24', 'Ссылка': 'javascript:alert(1)', 'Публикация': 'нет', metrics: {views: 10}}]}));
 const s = buildSnapshot(root);
 const text = JSON.stringify(s);
 for (const secret of ['Источник идеи', 'личное', 'Примечания', 'Обоснование даты', 'Концепция', 'Секретный черновик', 'created_at']) assert.ok(!text.includes(secret), 'утечка: ' + secret);
@@ -22,7 +25,13 @@ assert.equal(s.publications[0].approximate, true);
 assert.equal(s.publications[1]['Плановая дата'], '2026-11-30');
 assert.equal(s.publications[1].approximate, undefined);
 
+assert.deepEqual(s.stats.accounts.Telegram, [{date: '2026-11-25', followers: 10, views: 50, posts: 2}]);
+assert.deepEqual(s.stats.posts[0], {'Площадка': 'Telegram', 'Дата': '2026-11-23', 'Ссылка': 'https://t.me/c/1', 'Публикация': 'p1', metrics: {views: 40}});
+assert.deepEqual(s.stats.posts[1], {'Площадка': 'Telegram', 'Дата': '2026-11-24', metrics: {views: 10}});
+assert.equal(isApproximate({'Дата приблизительная': false, 'Примечания': 'Дата приблизительная'}), false, 'уточнено по API');
 assert.deepEqual(parseFrontMatter('---\n"id": "x"\n"n": 1\n---\ntext'), {id: 'x', n: 1});
+assert.deepEqual(parseFrontMatter('---\r\nid: "x"\r\nИсточник идеи: "a: b"\r\nЦелевые площадки: ["Telegram"]\r\n---\r\ntext'), {id: 'x', 'Источник идеи': 'a: b', 'Целевые площадки': ['Telegram']}, 'ключи без кавычек');
+assert.throws(() => parseFrontMatter('---\nid: x\n---'), /не JSON/);
 assert.throws(() => validate({content: [], goals: [], series: [], publications: [{id: 'p', 'Материал': ['нет']}]}), /несуществующий/);
 assert.throws(() => validate({content: [{id: 'a'}], goals: [], series: [], publications: [{id: 'p', 'Материал': ['a'], 'Статус': 'Запланировано'}]}), /без плановой даты/);
 console.log('OK export');

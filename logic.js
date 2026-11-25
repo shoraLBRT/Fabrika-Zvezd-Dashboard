@@ -111,3 +111,25 @@ export function themeByChannel(content, pubs) {
   }
   return {cells, totals};
 }
+
+/**
+ * Статистика аккаунта за период по ежедневным снимкам [{date, followers, views}].
+ * Прирост считается от последнего снимка до начала периода; если его нет — от первого снимка в периоде.
+ */
+export function accountPeriod(list, a = '', b = '') {
+  const points = list.filter(x => (!a || x.date >= a) && (!b || x.date <= b));
+  const before = a ? list.filter(x => x.date < a).at(-1) : undefined;
+  const base = before || points[0], last = points.at(-1);
+  const d = k => last && base && last[k] != null && base[k] != null ? last[k] - base[k] : null;
+  return {points, base, last, fromStart: !before, followersDelta: d('followers'), viewsGained: d('views')};
+}
+
+/** Прирост между соседними снимками: [{date, views, followers}]. Просмотры не уменьшаются (округление площадок). */
+export function gains(list) {
+  const out = [];
+  for (let i = 1; i < list.length; i++) {
+    const p = list[i - 1], x = list[i];
+    out.push({date: x.date, views: x.views != null && p.views != null ? Math.max(0, x.views - p.views) : 0, followers: x.followers != null && p.followers != null ? x.followers - p.followers : 0});
+  }
+  return out;
+}

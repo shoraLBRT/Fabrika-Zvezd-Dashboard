@@ -1,7 +1,7 @@
-import {dateKey, parseKey, daysBetween, range, selectPubs, balance, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds, selectPlanned, CHANNELS, themeByChannel} from './logic.js';
+import {dateKey, parseKey, daysBetween, range, selectPubs, balance, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds, selectPlanned, CHANNELS, themeByChannel, accountPeriod, gains} from './logic.js';
 
 // ---------- Константы ----------
-const TABS = {overview: 1, content: 1, analytics: 1, series: 1};
+const TABS = {overview: 1, content: 1, analytics: 1, series: 1, stats: 1};
 // Порядок в списках и в стеке графика. Цвета — фирменные (style.css, классы .p0…).
 const PLATFORM_ORDER = ['Telegram', 'Threads', 'Instagram Reels', 'YouTube Shorts', 'TikTok'];
 const PLATFORM_SHORT = {'Telegram': 'Telegram', 'Threads': 'Threads', 'Instagram Reels': 'Reels', 'YouTube Shorts': 'Shorts', 'TikTok': 'TikTok'};
@@ -22,6 +22,7 @@ const state = {
   overview: {unit: 'week', offset: 0},
   analytics: {unit: 'month', offset: 0, from: '', to: ''},
   content: {view: 'ideas', platform: ''},
+  stats: {days: '30'},
 };
 let data;
 
@@ -433,10 +434,117 @@ function series() {
   }).join('')}</div>`;
 }
 
+// ---------- Статистика ----------
+// Аккаунт → площадка для цвета и подписи. Подписчики YouTube общие для Shorts и длинных видео.
+const ACCOUNTS = [
+  {key: 'Telegram', platform: 'Telegram', followers: 'подписчики'},
+  {key: 'Threads', platform: 'Threads', followers: 'подписчики'},
+  {key: 'Instagram', platform: 'Instagram Reels', followers: 'подписчики'},
+  {key: 'YouTube', platform: 'YouTube Shorts', followers: 'подписчики канала'},
+];
+const signed = n => n == null ? '' : (n > 0 ? '+' : n < 0 ? '−' : '±') + num(Math.abs(n), 0);
+const METRIC_NAMES = {views: 'просмотры', reach: 'охват', likes: 'лайки', comments: 'комментарии', replies: 'ответы', reposts: 'репосты', quotes: 'цитаты', shares: 'поделились', saved: 'сохранения'};
+
+/** Линия подписчиков: SVG тянется по ширине, наведение — по колонкам поверх. */
+function followersLine(points, platform) {
+  const pts = points.filter(x => x.followers != null);
+  if (pts.length < 2) return `<p class="note">Динамика появится со второго дня наблюдений.</p>`;
+  const vals = pts.map(x => x.followers), lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = Math.max(1, (hi - lo) * 0.15), y0 = lo - pad, y1 = hi + pad;
+  const X = i => i / (pts.length - 1) * 100, Y = v => 100 - (v - y0) / (y1 - y0) * 100;
+  const line = pts.map((x, i) => `${X(i).toFixed(2)},${Y(x.followers).toFixed(2)}`).join(' ');
+  const hits = pts.map((x, i) => {
+    const prev = pts[i - 1], tip = `${dShort(x.date)}\nПодписчиков: ${num(x.followers, 0)}${prev ? `\nЗа день: ${signed(x.followers - prev.followers)}` : ''}`;
+    return `<i style="left:${X(i)}%" data-tip="${esc(tip)}" tabindex="0" aria-label="${esc(tip)}"></i>`;
+  }).join('');
+  return `<div class="line ${pcls(platform)}-c">
+    <div class="line-y"><span>${num(hi, 0)}</span><span>${num(lo, 0)}</span></div>
+    <div class="line-plot">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="0,100 ${line} 100,100" class="line-area"/>
+        <polyline points="${line}" class="line-stroke" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <i class="line-end" style="left:100%;top:${Y(pts.at(-1).followers)}%"></i>
+      <div class="line-hit" style="--n:${pts.length}">${hits}</div>
+    </div>
+    <div class="line-x"><span>${dShort(pts[0].date)}</span><span>${dShort(pts.at(-1).date)}</span></div>
+  </div>`;
+}
+
+/** Прирост просмотров по дням (или неделям) — столбики цвета площадки. */
+function viewBars(list, a, b, platform) {
+  const g = gains(list).filter(x => (!a || x.date >= a) && x.date <= b);
+  if (!g.length) return '';
+  const from = a && a > list[0].date ? a : list[0].date;
+  const gran = granularity(daysBetween(from, b));
+  const per = buckets(from, b, gran).map(x => ({...x, v: g.filter(y => y.date >= x.from && y.date <= x.to).reduce((s, y) => s + y.views, 0)}));
+  const max = Math.max(1, ...per.map(x => x.v));
+  const every = Math.ceil(per.length / (gran === 'day' ? 8 : 7));
+  const label = x => gran === 'month' ? MONTHS_SHORT[parseKey(x.from).getMonth()] : gran === 'week' ? dShort(x.from) : String(parseKey(x.from).getDate());
+  const bars = per.map((x, i) => {
+    const tip = `${gran === 'day' ? dShort(x.from) : dRange(x.from, x.to)}\nНовых просмотров: ${num(x.v, 0)}`;
+    return `<div class="col" data-tip="${esc(tip)}" tabindex="0" aria-label="${esc(tip)}">
+      <div class="col-val"></div>
+      <div class="col-bar" style="height:${x.v / max * 100}%">${x.v ? `<i class="${pcls(platform)}" style="flex:1"></i>` : ''}</div>
+      <div class="col-x">${i % every === 0 ? esc(label(x)) : ''}</div>
+    </div>`;
+  }).join('');
+  return `<div class="sub-h">Новые просмотры ${{day: 'по дням', week: 'по неделям', month: 'по месяцам'}[gran]}</div><div class="cols short" style="--n:${per.length}">${bars}</div>`;
+}
+
+function stats() {
+  const st = state.stats, S = data.stats, t = today();
+  const [a, b] = st.days === 'all' ? ['', t] : range(st.days, new Date());
+  const toolbar = `<div class="toolbar">${segmented('stats-days', [['7', '7 дней'], ['30', '30 дней'], ['90', '90 дней'], ['all', 'Всё время']], st.days)}${info('Снимок аккаунтов делается каждые 6 часов, в истории остаётся последний за день.\nПросмотры — сумма просмотров всех постов аккаунта; прирост — разница между снимками.\nYouTube и Telegram показывают округлённые числа, когда их много.')}</div>`;
+  const connected = ACCOUNTS.filter(x => S?.accounts?.[x.key]?.length);
+  if (!connected.length) return toolbar + card('Статистика площадок', empty('Площадки ещё не подключены. Данные появятся после первой синхронизации.'));
+  const period = st.days === 'all' ? 'за всё время' : `за ${st.days} дней`;
+
+  const cards = connected.map(acc => {
+    const list = S.accounts[acc.key], r = accountPeriod(list, a, b);
+    if (!r.last) return card(`${dot(acc.platform)}${esc(acc.key)}`, empty('За период нет снимков'));
+    const since = r.fromStart ? `с ${dShort(r.base.date)}` : period;
+    const tile = (label, value, delta, note) => `<div class="stat">
+      <div class="stat-l">${label}</div>
+      <div class="stat-v">${value}</div>
+      <div class="stat-d ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${note}</div>
+    </div>`;
+    const fNote = r.followersDelta == null ? '' : r.points.length < 2 && !r.base ? '' : `${signed(r.followersDelta)} ${since}`;
+    const vNote = `всего ${num(r.last.views ?? 0, 0)}`;
+    return card(`${dot(acc.platform)}${esc(acc.key)}`,
+      `<div class="stats-2">
+        ${tile(acc.followers, r.last.followers != null ? num(r.last.followers, 0) : '—', r.followersDelta, fNote)}
+        ${tile(`просмотры ${r.fromStart ? `с ${dShort(r.base.date)}` : period}`, r.viewsGained != null ? signed(r.viewsGained).replace(/^±/, '') : '—', 0, vNote)}
+      </div>
+      ${followersLine(r.points, acc.platform)}
+      ${viewBars(list, a, b, acc.platform)}`,
+      {aside: `<span class="muted">${r.last.posts != null ? pl(r.last.posts, ['пост', 'поста', 'постов']) + ' · ' : ''}${dShort(r.last.date)}</span>`});
+  }).join('');
+
+  const missing = ACCOUNTS.filter(x => !connected.includes(x));
+  const posts = (S.posts || []).filter(x => (!a || x['Дата'] >= a) && x['Дата'] <= b && x.metrics?.views != null)
+    .sort((x, y) => y.metrics.views - x.metrics.views).slice(0, 10);
+  const pubName = id => { const p = data.publications.find(x => x.id === id); return p ? p['Публикация'] || contentById(p['Материал']?.[0])?.['Название'] : ''; };
+  const postRow = x => {
+    const name = x['Публикация'] ? pubName(x['Публикация']) : '';
+    const extra = Object.entries(x.metrics).filter(([k, v]) => k !== 'views' && METRIC_NAMES[k] && v).slice(0, 3).map(([k, v]) => `${METRIC_NAMES[k]} ${num(v, 0)}`).join(' · ');
+    const title = esc(name || 'Пост без привязки к материалу');
+    return `<li class="row pub">
+      <span class="pub-d">${dShort(x['Дата'])}</span>
+      <div class="row-main"><div class="row-t ${name ? '' : 'muted'}">${x['Ссылка'] ? `<a class="plain" href="${esc(x['Ссылка'])}" target="_blank" rel="noopener">${title} ↗</a>` : title}</div><div class="row-m">${tag(x['Площадка'])}${extra ? `<span>${esc(extra)}</span>` : ''}</div></div>
+      <span class="views"><b>${num(x.metrics.views, 0)}</b><small>просм.</small></span>
+    </li>`;
+  };
+  const top = card(`Публикации по просмотрам`, posts.length ? `<ul class="rows">${posts.map(postRow).join('')}</ul>` : empty('За период нет постов со статистикой'),
+    {aside: `<span class="muted">${period}</span>`, tip: 'Посты, вышедшие за период, по числу просмотров на сегодня. Метрики свежих постов (до 60 дней) обновляются, у старых остаются последние значения.'});
+
+  return toolbar + `<div class="series-grid stats-grid">${cards}</div>${top}${missing.length ? `<p class="note">Ещё не подключены: ${missing.map(x => esc(x.key)).join(', ')}.${S.updated_at ? ` Последняя синхронизация ${dShort(S.updated_at.slice(0, 10))}.` : ''}</p>` : ''}`;
+}
+
 // ---------- Рендер и события ----------
 function render() {
   document.querySelectorAll('nav [data-tab]').forEach(b => b.setAttribute('aria-current', b.dataset.tab === state.tab ? 'page' : 'false'));
-  app.innerHTML = ({overview, content, analytics, series}[state.tab])();
+  app.innerHTML = ({overview, content, analytics, series, stats}[state.tab])();
 }
 
 app.addEventListener('click', e => {
@@ -537,7 +645,7 @@ function showGhost(t) {
     // position: fixed — чтобы вынесенный за край экрана призрак не расширял страницу.
     const r = app.getBoundingClientRect();
     Object.assign(ghost.style, {left: r.left + 'px', width: r.width + 'px', top: r.top + scrollY + 'px'});
-    ghost.innerHTML = ({overview, content, analytics, series}[t])();
+    ghost.innerHTML = ({overview, content, analytics, series, stats}[t])();
     ghost.dataset.tab = t;
   }
 }
