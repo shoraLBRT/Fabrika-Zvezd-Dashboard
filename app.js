@@ -70,12 +70,18 @@ function ideaBank() {
     const s = stats.find(x => x.name === name);
     const ideas = data.content.filter(c => c['Тематика'] === name && !pubIds.has(c.id))
       .sort((x, y) => (PRIORITY[x['Приоритет']] ?? 1) - (PRIORITY[y['Приоритет']] ?? 1));
-    return {name, ideas, gap: s?.gap ?? null, deficit: s?.gap > 0.05};
+    return {name, ideas, gap: s?.gap ?? null, actual: s?.actual ?? null, target: s?.target ?? null, deficit: s?.gap > 0.05};
   }).sort((x, y) => (y.gap ?? -1e9) - (x.gap ?? -1e9));
 }
 
 // ---------- Компоненты ----------
-const card = (title, body, {cls = '', aside = ''} = {}) => `<section class="card ${cls}"><header class="card-h"><h2>${title}</h2>${aside}</header>${body}</section>`;
+/** Значок ⓘ с подсказкой вместо длинных пояснений. */
+const info = text => `<span class="info" data-tip="${esc(text)}" tabindex="0" role="img" aria-label="${esc(text)}">i</span>`;
+const card = (title, body, {cls = '', aside = '', tip = ''} = {}) => `<section class="card ${cls}"><header class="card-h"><h2>${title}${tip ? info(tip) : ''}</h2>${aside}</header>${body}</section>`;
+const pct = x => x == null ? '0%' : num(x, 0) + '%';
+/** Доля тематики против цели — человеческими словами, с подсказкой. */
+const shareTip = (x, days) => `За ${days} дней на тематику пришлось ${pct(x.actual)} опубликованных материалов, а цель — ${pct(x.target)}.` + (x.deficit ? `\nНе хватает ${num(x.gap, 0)} процентных пунктов.` : '');
+const approxTip = 'Дата приблизительная';
 const empty = text => `<p class="empty">${text}</p>`;
 const segmented = (id, options, value) => `<div class="seg" role="group" id="${id}">${options.map(([v, n]) => `<button type="button" data-value="${v}" aria-pressed="${v === value}">${n}</button>`).join('')}</div>`;
 
@@ -179,7 +185,7 @@ function planList(list) {
     const c = contentById(p['Материал']?.[0]), d = p['Плановая дата'], overdue = d < t;
     return `<li class="row pub">
       <span class="pub-d ${overdue ? 'warn-text' : ''}">${d === t ? 'сегодня' : dShort(d)}</span>
-      <div class="row-main"><div class="row-t">${esc(c?.['Название'] || p['Публикация'])}</div><div class="row-m">${esc(c?.['Тематика'] || '')}${overdue ? ' · <span class="warn-text">просрочено — не отмечено как вышедшее</span>' : ''}</div></div>
+      <div class="row-main"><div class="row-t">${esc(c?.['Название'] || p['Публикация'])}</div><div class="row-m">${esc(c?.['Тематика'] || '')}${overdue ? ' · <span class="warn-text" data-tip="Дата прошла, а публикация не отмечена как вышедшая" tabindex="0">просрочено</span>' : ''}</div></div>
       <span class="pub-p">${p.platforms.sort((x, y) => platformIdx(x) - platformIdx(y)).map(x => tag(x)).join('')}</span>
     </li>`;
   }).join('')}</ul>`;
@@ -216,35 +222,34 @@ function overview() {
     <div class="plan-cells" aria-hidden="true">${cells}</div>
     <div><b>${doneCount} из ${rows.length}</b> площадок ${isPast || a > t ? '' : 'уже '}выполнили план</div>
   </div>`;
-  const notes = [unit !== 'week' ? `План = недельная цель × ${num(days / 7)} нед.` : '', plans.length ? 'Штриховка — запланированные публикации.' : ''].filter(Boolean).join(' ');
+  const notes = ['Цель по каждой площадке задана на неделю' + (unit !== 'week' ? `; для этого периода она умножена на ${num(days / 7)} нед.` : '.'), 'Сплошная полоса — вышло, штриховка — запланировано.'].join('\n');
 
   const chart = columns(pubs, plans, a, b);
   const bank = ideaBank(), total = bank.reduce((s, x) => s + x.ideas.length, 0);
   const bankRows = bank.map(x => {
     const n = x.ideas.length, cls = n === 0 && x.deficit ? 'alert' : n === 0 ? 'zero' : '';
     return `<li class="stock ${cls}">
-      <span class="stock-name">${esc(x.name)}${x.deficit ? `<small>отстаёт от цели на ${num(x.gap, 0)} п.п.</small>` : ''}</span>
+      <span class="stock-name">${esc(x.name)}${x.deficit ? `<small data-tip="${esc(shareTip(x, DEFICIT_DAYS))}" tabindex="0">отстаёт: ${pct(x.actual)} при цели ${pct(x.target)}</small>` : ''}</span>
       <span class="stock-n">${n || '—'}</span>
     </li>`;
   }).join('');
-  const empties = bank.filter(x => !x.ideas.length && x.deficit).length;
 
   const horizon = addDays(t, 14);
   const upcoming = planned('', horizon);
   const allPlans = planned().length;
   const upcomingCard = card('Ближайшие публикации',
-    upcoming.length ? planList(upcoming.slice(0, 6)) : empty('На ближайшие две недели ничего не запланировано. Попросите ChatGPT предложить даты для идей из банка.'),
-    {aside: allPlans ? `<a class="link" href="#content" data-view="plan">весь план · ${allPlans} →</a>` : '<span class="muted">14 дней</span>'});
+    upcoming.length ? planList(upcoming.slice(0, 6)) : empty('Ничего не запланировано'),
+    {aside: allPlans ? `<a class="link" href="#content" data-view="plan">весь план · ${allPlans} →</a>` : '<span class="muted">14 дней</span>', tip: 'Запланированное на 14 дней вперёд. Чтобы добавить даты, попросите ChatGPT предложить их для идей из банка.'});
 
   return `${periodNav('overview')}<div class="layout-2">
     <div class="stack">
-      ${card(`План на ${UNITS[unit].acc}`, summary + rows.map(r => r.html).join('') + (notes ? `<p class="note">${notes}</p>` : ''))}
+      ${card(`План на ${UNITS[unit].acc}`, summary + rows.map(r => r.html).join(''), {tip: notes})}
       ${upcomingCard}
     </div>
     <div class="stack">
       ${card('Публикации', pubs.length || plans.length ? chart.html : empty('За этот период публикаций нет'), {aside: `<span class="muted">${chart.unit}</span>`})}
-      ${card('Запас идей', `<ul class="stocks">${bankRows}</ul>${empties ? `<p class="note warn-text">Нет идей в ${pl(empties, ['отстающей тематике', 'отстающих тематиках', 'отстающих тематиках'])} — стоит пополнить</p>` : ''}`,
-        {aside: `<a class="link" href="#content" data-view="ideas">${pl(total, IDEAS)} →</a>`})}
+      ${card('Запас идей', `<ul class="stocks">${bankRows}</ul>`,
+        {aside: `<a class="link" href="#content" data-view="ideas">${pl(total, IDEAS)} →</a>`, tip: `Неопубликованные идеи по тематикам. Сверху — тематики, которые сильнее всего отстают от целевой доли за ${DEFICIT_DAYS} дней. Оранжевым — отстающие без идей: их стоит пополнить.`})}
     </div>
   </div>`;
 }
@@ -260,23 +265,30 @@ function content() {
 
   if (st.view === 'ideas') {
     const ideaRow = x => {
-      const meta = [x['Формат'], x['Серия']?.length ? `${seriesName(x['Серия'][0]) || 'серия'}${x['Номер выпуска'] ? `, выпуск ${x['Номер выпуска']}` : ''}` : '', !['Идея', 'Запланировано'].includes(x['Статус']) ? x['Статус'] : ''].filter(Boolean);
+      const sName = x['Серия']?.length ? seriesName(x['Серия'][0]) : '';
+      const series = sName && sName !== x['Название'] ? `${sName}${x['Номер выпуска'] ? ` · №${x['Номер выпуска']}` : ''}` : x['Номер выпуска'] ? `выпуск ${x['Номер выпуска']}` : '';
+      const status = !['Идея', 'Запланировано'].includes(x['Статус']) ? x['Статус'] : '';
       const xs = plans.filter(p => p['Материал']?.includes(x.id));
-      return `<li class="row">${x['Приоритет'] === 'Высокий' ? '<span class="prio" title="Высокий приоритет">↑</span>' : ''}<div class="row-main">
-        <div class="row-t">${esc(x['Название'])}</div>
-        ${meta.length ? `<div class="row-m">${esc(meta.join(' · '))}</div>` : ''}
-        ${xs.length ? `<div class="row-tags">${xs.map(p => tag(p['Площадка'], dShort(p['Плановая дата']), 'plan-tag')).join('')}</div>` : ''}
-      </div></li>`;
+      const high = x['Приоритет'] === 'Высокий';
+      return `<li class="row idea">
+        <div class="row-main">
+          <div class="row-t">${high ? '<span class="prio" data-tip="Высокий приоритет" tabindex="0">↑</span>' : ''}${esc(x['Название'])}</div>
+          <div class="row-m">${x['Формат'] ? `<span class="fmt">${esc(x['Формат'])}</span>` : ''}${series ? `<span class="ser">${esc(series)}</span>` : ''}${status ? `<span>${esc(status)}</span>` : ''}</div>
+          ${xs.length ? `<div class="row-tags">${xs.map(p => tag(p['Площадка'], dShort(p['Плановая дата']), 'plan-tag')).join('')}</div>` : ''}
+        </div></li>`;
     };
-    const sections = bank.map(x => `<section class="group">
-      <header class="group-h"><h3>${esc(x.name)}</h3>${x.deficit ? `<span class="gap">−${num(x.gap, 0)} п.п.</span>` : ''}<span class="group-n">${x.ideas.length || ''}</span></header>
-      ${x.ideas.length ? `<ul class="rows">${x.ideas.map(ideaRow).join('')}</ul>` : `<p class="group-empty ${x.deficit ? 'warn-text' : ''}">${x.deficit ? 'Идей нет, а тематика отстаёт' : 'Идей нет'}</p>`}
-    </section>`).join('');
-    return `<div class="toolbar">${tabs}</div>
-      <section class="card list">
-        <p class="hint">Тематики отсортированы по отставанию от целевой доли за последние 30 дней. <span class="gap">−N п.п.</span> — насколько тематика ниже цели. Цветные метки — запланированная дата и площадка.</p>
-        ${sections}
+    const sections = bank.map(x => {
+      const share = x.target == null ? ''
+        : `<span class="share ${x.deficit ? 'warn' : ''}" data-tip="${esc(shareTip(x, DEFICIT_DAYS))}" tabindex="0">${x.deficit ? 'отстаёт · ' : ''}${pct(x.actual)} при цели ${pct(x.target)}</span>`;
+      const body = x.ideas.length ? `<ul class="rows">${x.ideas.map(ideaRow).join('')}</ul>`
+        : `<p class="group-empty ${x.deficit ? 'warn-text' : ''}">${x.deficit ? 'Идей нет — стоит пополнить' : 'Идей нет'}</p>`;
+      return `<section class="card theme ${x.deficit ? 'deficit' : ''}">
+        <header class="theme-h"><h3>${esc(x.name)}</h3><span class="theme-n">${x.ideas.length ? pl(x.ideas.length, IDEAS) : ''}</span>${share}</header>
+        ${body}
       </section>`;
+    }).join('');
+    return `<div class="toolbar">${tabs}${info(`Тематики идут по отставанию от целевой доли за последние ${DEFICIT_DAYS} дней: сверху — те, где публикаций меньше всего относительно цели.\nЦветные метки у идеи — площадка и запланированная дата.`)}</div>
+      ${sections}`;
   }
 
   if (st.view === 'plan') {
@@ -290,9 +302,8 @@ function content() {
       const title = k === 'overdue' ? 'Просрочено' : `Неделя ${dRange(...periodBounds('week', 0, parseKey(k)))}`;
       return `<section class="group"><header class="group-h"><h3 class="${k === 'overdue' ? 'warn-text' : ''}">${title}</h3><span class="group-n">${ps.length}</span></header>${planList(ps)}</section>`;
     }).join('');
-    return `<div class="toolbar">${tabs}</div>
+    return `<div class="toolbar">${tabs}${info('Дату предлагает ChatGPT по регламенту Content OS, запись появляется после вашего «окей». Когда публикация выходит, она переезжает во «Вышло».')}</div>
       <section class="card list">
-        <p class="hint">Дату предлагает ChatGPT по регламенту Content OS, запись появляется после вашего «окей». Когда публикация выходит, она переезжает во «Вышло».</p>
         ${sections || empty('Пока ничего не запланировано. Напишите ChatGPT: «предложи даты для идей из банка».')}
       </section>`;
   }
@@ -310,7 +321,7 @@ function content() {
     const c = contentById(g.id), d = lastDate(g), approx = g.pubs.some(p => p.approximate);
     const parts = g.pubs.length > 1 && new Set(g.pubs.map(p => p['Публикация'])).size > 1 ? ` · ${g.pubs.length} поста` : '';
     return `<li class="row pub">
-      <span class="pub-d">${d ? (approx ? '≈' : '') + dShort(d) : '—'}</span>
+      <span class="pub-d" ${approx ? `data-tip="${approxTip}" tabindex="0"` : ''}>${d ? (approx ? '≈' : '') + dShort(d) : '—'}</span>
       <div class="row-main"><div class="row-t">${esc(c?.['Название'] || g.pubs[0]['Публикация'])}</div><div class="row-m">${esc(c?.['Тематика'] || '')}${parts}</div></div>
       <span class="pub-p">${[...new Set(g.pubs.map(p => p['Площадка']))].sort((x, y) => platformIdx(x) - platformIdx(y)).map(p => tag(p)).join('')}</span>
     </li>`;
@@ -319,9 +330,8 @@ function content() {
     const title = k ? `${MONTHS_NOM[Number(k.slice(5)) - 1]} ${k.slice(0, 4)}` : 'Без даты';
     return `<section class="group"><header class="group-h"><h3>${title}</h3><span class="group-n">${gs.length}</span></header><ul class="rows">${gs.map(row).join('')}</ul></section>`;
   }).join('');
-  return `<div class="toolbar">${tabs}${segmented('content-platform', platforms, st.platform)}</div>
+  return `<div class="toolbar">${tabs}${segmented('content-platform', platforms, st.platform)}${info('Один материал — одна строка, даже если он вышел на нескольких площадках.\n≈ — дата приблизительная.')}</div>
     <section class="card list">
-      <p class="hint">Один материал — одна строка, даже если вышел на нескольких площадках. ≈ — дата приблизительная.</p>
       ${sections || empty('Публикаций нет')}
     </section>`;
 }
@@ -348,12 +358,11 @@ function analytics() {
       <td class="w">${meter(x.actual ?? 0, x.target, maxShare, {ok: gap != null && gap <= 0.05, label: `${x.name}: ${num(x.actual ?? 0)}% при цели ${num(x.target)}%`})}</td>
       <td class="r">${x.actual == null ? '—' : num(x.actual, 0) + '%'}</td>
       <td class="r muted">${num(x.target)}%</td>
-      <td class="r delta ${cls}">${d}</td>
+      <td class="r delta ${cls}" data-tip="${esc(gap == null ? 'Нет публикаций' : `${num(x.actual, 0)}% − ${num(x.target)}% = ${d} процентных пунктов`)}" tabindex="0">${d}</td>
     </tr>`;
   }).join('');
   const noFacts = future ? 'Будущий период — фактов ещё нет. Запланированное видно в «Динамике».' : 'За период нет опубликованных материалов';
-  const themeTable = uniq ? `<table class="tbl"><thead><tr><th>Тематика</th><th class="w"><span class="leg-fill"></span>факт <span class="leg-tick"></span>цель</th><th class="r">Факт</th><th class="r">Цель</th><th class="r">Δ п.п.</th></tr></thead><tbody>${themeRows}</tbody></table>
-    <p class="note">Доля среди ${pl(uniq, ['уникального материала', 'уникальных материалов', 'уникальных материалов'])} за период.</p>`
+  const themeTable = uniq ? `<table class="tbl"><thead><tr><th>Тематика</th><th class="w"><span class="leg-fill"></span>факт <span class="leg-tick"></span>цель</th><th class="r">Факт</th><th class="r">Цель</th><th class="r">Разница</th></tr></thead><tbody>${themeRows}</tbody></table>`
     : empty(noFacts);
 
   // Тематики × каналы: в каких каналах закрывается каждая тематика.
@@ -371,7 +380,7 @@ function analytics() {
     }).join('')}</tr>`).join('')}
     <tr class="tot"><th scope="row">Всего в канале</th>${CHANNELS.map(ch => `<td class="c">${tc.totals[ch] || '—'}</td>`).join('')}</tr>
   </tbody></table>
-  <p class="note">Число уникальных материалов. Видео = Reels + Shorts, кросспост считается один раз. <b class="warn-text">!</b> — тематика с целью ≥15% не выходила в канале, где за период ≥3 материалов.</p>`
+`
     : empty(noFacts);
 
   const pg = platformGoals();
@@ -386,15 +395,14 @@ function analytics() {
       <td class="r delta ${pct >= 100 ? 'pos' : 'neg'}">${norm ? num(pct, 0) + '%' : '—'}</td>
     </tr>`;
   }).join('');
-  const platTable = days ? `<table class="tbl"><thead><tr><th>Площадка</th><th class="w"></th><th class="r">Факт</th><th class="r">Норма</th><th class="r">Выполн.</th></tr></thead><tbody>${platRows}</tbody></table>
-    <p class="note">Норма = недельная цель × ${pl(days, ['учтённый день', 'учтённых дня', 'учтённых дней'])} / 7. Учёт ведётся с ${dShort(tracked)}.</p>`
+  const platTable = days ? `<table class="tbl"><thead><tr><th>Площадка</th><th class="w"></th><th class="r">Факт</th><th class="r">Норма</th><th class="r">Выполн.</th></tr></thead><tbody>${platRows}</tbody></table>`
     : empty(future ? noFacts : 'Период до начала учёта — данных нет');
 
   const chart = columns(pubs, plans, a, b);
   return periodNav('analytics', [['all', 'Всё'], ['custom', 'Даты']]) + `<div class="layout-2 even">
-    ${card('Тематический баланс', themeTable, {aside: '<span class="muted">по уникальным материалам</span>'})}
-    ${card('Площадки', platTable, {aside: '<span class="muted">по публикациям</span>'})}
-    ${card('Тематики по каналам', matrix, {aside: '<span class="muted">где выходит каждая тема</span>'})}
+    ${card('Тематический баланс', themeTable, {tip: `Какая доля опубликованных материалов пришлась на каждую тематику${uniq ? ` (всего ${pl(uniq, ['материал', 'материала', 'материалов'])} за период)` : ''}. Кросспост одного материала считается один раз.\nРазница — сколько процентных пунктов не хватает до цели (−) или сверх неё (+): 12% при цели 27% → −15.`})}
+    ${card('Площадки', platTable, {tip: `Сколько публикаций вышло на каждой площадке против нормы.\nНорма = недельная цель × ${pl(days, ['учтённый день', 'учтённых дня', 'учтённых дней'])} / 7. Учёт ведётся с ${dShort(tracked)}.`})}
+    ${card('Тематики по каналам', matrix, {tip: 'Где выходит каждая тематика: число уникальных материалов. Видео = Reels + Shorts, кросспост считается один раз.\n! — тематика с целью от 15% ни разу не вышла в канале, где за период было 3+ материала.'})}
     ${card('Динамика', pubs.length || plans.length ? chart.html : empty('Нет публикаций за период'), {aside: `<span class="muted">${chart.unit}</span>`})}
   </div>`;
 }
@@ -522,6 +530,7 @@ fetch('./data.json', {cache: 'no-store'})
     data = d;
     const last = published().map(p => p['Дата публикации']).filter(Boolean).sort().at(-1);
     document.querySelector('#updated').textContent = last ? `последняя публикация ${dShort(last)}` : '';
+    document.querySelector('#updated').insertAdjacentHTML('afterend', info('Учтены только внесённые в Content OS записи: если записи нет, это не значит, что активности не было.'));
     render();
   })
   .catch(() => { app.innerHTML = empty('Не удалось загрузить данные. Обновите страницу.'); });

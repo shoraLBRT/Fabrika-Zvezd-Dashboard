@@ -44,9 +44,8 @@ input { background: var(--surface); border: 1px solid var(--line); border-radius
 .empty { color: var(--text-3); padding: 6px 0; }
 .note { color: var(--text-3); font-size: 12px; margin-top: 8px; }
 .warn-text { color: var(--warn); }
-main, .top-in, footer { max-width: 1120px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
-main { padding-top: 14px; padding-bottom: 8px; }
-footer { color: var(--text-3); font-size: 12px; padding-top: 4px; padding-bottom: 24px; }
+main, .top-in { max-width: 1120px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
+main { padding-top: 14px; padding-bottom: 24px; }
 .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-size: 13px; text-decoration: none; white-space: nowrap; }
 .link:hover { text-decoration: underline; }
 
@@ -227,7 +226,7 @@ nav button[aria-current="page"] { color: var(--accent); border-bottom-color: var
 
 /* ---------- Мобильный ---------- */
 @media (max-width: 520px) {
-  main, .top-in, footer { padding-left: 12px; padding-right: 12px; }
+  main, .top-in { padding-left: 12px; padding-right: 12px; }
   .top-in { gap: 0; padding-top: 8px; }
   .brand { width: 100%; }
   nav { margin-left: -8px; width: calc(100% + 8px); }
@@ -257,3 +256,24 @@ nav button[aria-current="page"] { color: var(--accent); border-bottom-color: var
 #app.slide-r { animation: slide-r .22s ease-out; }
 @media (prefers-reduced-motion: reduce) { #app.slide-l, #app.slide-r { animation: none; } }
 body { overflow-x: hidden; }
+
+/* Подсказки ⓘ */
+.info { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 6px; border-radius: 50%; border: 1px solid var(--text-3); color: var(--text-3); font: italic 600 10px/1 Georgia, serif; cursor: help; vertical-align: 2px; flex: none; }
+.info:hover, .info:focus-visible { color: var(--accent); border-color: var(--accent); }
+.toolbar .info { width: 20px; height: 20px; font-size: 12px; margin-left: 0; }
+[data-tip]:not(.info):not(.col):not(.cell) { cursor: help; }
+.brand .info { vertical-align: middle; margin-left: 4px; }
+
+/* Идеи: тематика — отдельная карточка */
+.theme { padding-top: 10px; padding-bottom: 4px; }
+.theme.deficit { border-left: 3px solid var(--warn-mark); }
+.theme-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
+.theme-h h3 { font-size: 16px; font-weight: 700; }
+.theme-n { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.share { flex-basis: 100%; font-size: 12px; color: var(--text-3); }
+.share.warn { background: none; color: var(--warn); font-weight: 600; }
+.theme .group-empty { padding: 8px 0 6px; }
+.row.idea .row-t { font-size: 14px; font-weight: 500; }
+.row.idea .row-m { margin-top: 3px; align-items: center; gap: 4px 8px; color: var(--text-3); }
+.fmt { font-size: 11px; font-weight: 600; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 4px; padding: 0 5px; line-height: 17px; }
+.prio { margin-right: 4px; }
