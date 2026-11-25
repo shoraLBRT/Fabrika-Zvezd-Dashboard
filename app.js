@@ -1,4 +1,4 @@
-import {dateKey, parseKey, daysBetween, range, selectPubs, balance, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds, selectPlanned, CHANNELS, themeByChannel, accountPeriod, gains} from './logic.js';
+import {dateKey, parseKey, daysBetween, range, selectPubs, balance, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds, selectPlanned, CHANNELS, themeByChannel, accountPeriod, gains, isHiddenTheme} from './logic.js';
 
 // ---------- Константы ----------
 const TABS = {overview: 1, content: 1, analytics: 1, series: 1, stats: 1};
@@ -58,6 +58,9 @@ const themeGoals = () => data.goals.filter(g => g['Активна'] && g['Тип
 const published = () => selectPubs(data.publications, '', '');
 const planned = (a = '', b = '') => selectPlanned(data.publications, a, b).sort((x, y) => x['Плановая дата'].localeCompare(y['Плановая дата']));
 const materialIds = p => new Set(p.flatMap(x => x['Материал'] || []));
+/** Материал служебной тематики («Мусор»): в активности площадок есть, в тематиках и истории не показывается. */
+const isHidden = id => isHiddenTheme(contentById(id)?.['Тематика']);
+const visibleIds = p => new Set([...materialIds(p)].filter(id => !isHidden(id)));
 const contentById = id => data.content.find(c => c.id === id);
 const trackingStart = () => published().map(p => p['Дата публикации']).filter(Boolean).sort()[0] || today();
 const pubDate = p => p['Дата публикации'] || p['Плановая дата'];
@@ -66,7 +69,7 @@ const pubDate = p => p['Дата публикации'] || p['Плановая �
 function ideaBank() {
   const pubIds = materialIds(published());
   const stats = balance(data.content, selectPubs(data.publications, ...range(DEFICIT_DAYS, new Date())), themeGoals());
-  const names = [...new Set([...stats.map(x => x.name), ...data.content.map(c => c['Тематика']).filter(Boolean)])];
+  const names = [...new Set([...stats.map(x => x.name), ...data.content.map(c => c['Тематика']).filter(Boolean)])].filter(n => !isHiddenTheme(n));
   return names.map(name => {
     const s = stats.find(x => x.name === name);
     const ideas = data.content.filter(c => c['Тематика'] === name && !pubIds.has(c.id))
@@ -262,7 +265,7 @@ function overview() {
 function content() {
   const st = state.content, t = today();
   const bank = ideaBank(), totalIdeas = bank.reduce((s, x) => s + x.ideas.length, 0);
-  const groups = groupByMaterial(published());
+  const groups = groupByMaterial(published()).filter(g => !isHidden(g.id));
   const plans = planned();
   const seriesName = id => data.series.find(s => s.id === id)?.['Название'];
   const tabs = segmented('content-view', [['ideas', `Идеи · ${totalIdeas}`], ['plan', `План · ${plans.length}`], ['published', `Вышло · ${groups.length}`]], st.view);
@@ -349,7 +352,7 @@ function analytics() {
   const plans = UNITS[st.unit] && b >= t ? planned(a > t ? a : t, b) : [];
   const tracked = trackingStart(), from = a > tracked ? a : tracked, to = b > t ? t : b;
   const days = to >= from ? daysBetween(from, to) : 0;
-  const uniq = materialIds(pubs).size;
+  const uniq = visibleIds(pubs).size;
   const future = a > t;
 
   const s = balance(data.content, pubs, themeGoals()).sort((x, y) => (y.gap ?? -1e9) - (x.gap ?? -1e9));
