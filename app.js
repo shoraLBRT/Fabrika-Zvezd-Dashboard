@@ -276,12 +276,13 @@ function content() {
       const series = sName && sName !== x['Название'] ? `${sName}${x['Номер выпуска'] ? ` · №${x['Номер выпуска']}` : ''}` : x['Номер выпуска'] ? `выпуск ${x['Номер выпуска']}` : '';
       const status = !['Идея', 'Запланировано'].includes(x['Статус']) ? x['Статус'] : '';
       const xs = plans.filter(p => p['Материал']?.includes(x.id));
+      const targets = [...new Set(x['Целевые площадки'] || [])].filter(p => !xs.some(q => q['Площадка'] === p));
       const high = x['Приоритет'] === 'Высокий';
       return `<li class="row idea">
         <div class="row-main">
           <div class="row-t">${high ? '<span class="prio" data-tip="Высокий приоритет" tabindex="0">↑</span>' : ''}${esc(x['Название'])}</div>
           <div class="row-m">${x['Формат'] ? `<span class="fmt">${esc(x['Формат'])}</span>` : ''}${series ? `<span class="ser">${esc(series)}</span>` : ''}${status ? `<span>${esc(status)}</span>` : ''}</div>
-          ${xs.length ? `<div class="row-tags">${xs.map(p => tag(p['Площадка'], dShort(p['Плановая дата']), 'plan-tag')).join('')}</div>` : ''}
+          ${xs.length || targets.length ? `<div class="row-tags">${xs.map(p => tag(p['Площадка'], dShort(p['Плановая дата']), 'plan-tag')).join('')}${targets.map(p => tag(p)).join('')}</div>` : ''}
         </div></li>`;
     };
     const sections = bank.map(x => {
@@ -294,7 +295,7 @@ function content() {
         ${body}
       </section>`;
     }).join('');
-    return `<div class="toolbar">${tabs}${info(`Тематики идут по отставанию от целевой доли за последние ${DEFICIT_DAYS} дней: сверху — те, где публикаций меньше всего относительно цели.\nЦветные метки у идеи — площадка и запланированная дата.`)}</div>
+    return `<div class="toolbar">${tabs}${info(`Тематики идут по отставанию от целевой доли за последние ${DEFICIT_DAYS} дней: сверху — те, где публикаций меньше всего относительно цели.\nМетки у идеи — целевые площадки; метки с датой — запланированные публикации.`)}</div>
       ${sections}`;
   }
 
