@@ -10,9 +10,11 @@ permissions:
   actions: read
   pages: write
   id-token: write
+# Не обрываем идущий деплой: прерванный на середине деплой Pages падает или висит.
+# Новые запуски встают в очередь; из ожидающих GitHub оставляет только самый свежий.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -50,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
     steps:
       - name: Wait for artifact metadata
         env:
@@ -61,5 +63,12 @@ jobs:
             sleep 5
           done
           exit 1
+      # Pages API иногда отвечает 500 (сбой на стороне GitHub) — повторяем деплой после паузы.
       - uses: actions/deploy-pages@v4
         id: deployment
+        continue-on-error: true
+      - if: steps.deployment.outcome == 'failure'
+        run: sleep 60
+      - if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        id: retry
