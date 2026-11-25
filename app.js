@@ -1,4 +1,4 @@
-import {dateKey, parseKey, daysBetween, range, selectPubs, balance, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds, selectPlanned, CHANNELS, themeByChannel, accountPeriod, gains, isHiddenTheme, isTrashPub} from './logic.js';
+import {dateKey, parseKey, daysBetween, range, selectPubs, balance, effectiveRange, granularity, buckets, proratedTarget, groupByMaterial, periodBounds, selectPlanned, CHANNELS, themeByChannel, accountPeriod, gains, isHiddenTheme, isTrashPub, weekNeeds} from './logic.js';
 
 // ---------- Константы ----------
 const TABS = {overview: 1, content: 1, analytics: 1, series: 1, stats: 1};
@@ -198,6 +198,36 @@ function planList(list) {
   }).join('')}</ul>`;
 }
 
+// ---------- Что выкладываем ----------
+const CHANNEL_UNIT = {'Telegram': ['пост', 'поста', 'постов'], 'Короткие видео': ['ролик', 'ролика', 'роликов'], 'YouTube Long': ['видео', 'видео', 'видео']};
+const CHANNEL_FORMAT = {'Telegram': 'пост в Telegram', 'Короткие видео': 'короткий ролик', 'YouTube Long': 'длинное видео'};
+const gapPP = g => `−${num(g, 0)} п.п.`;
+
+/** Карточка «Что выкладываем»: недобор по каналам недели, подходящие идеи из банка и каких идей не хватает. */
+function todoCard(a, b, pubs, plans) {
+  const themes = balance(data.content, selectPubs(data.publications, ...range(DEFICIT_DAYS, new Date())), themeGoals());
+  const needs = weekNeeds({goals: platformGoals(), content: data.content, pubs, plans, allPubs: data.publications, themes});
+  const open = needs.filter(x => x.need > 0), closed = needs.filter(x => x.need <= 0);
+  const platTags = x => x.platforms.map(p => tag(p)).join('');
+  const block = x => {
+    const ideas = x.ideas.map(({c, gap}) => `<li class="row">
+      <div class="row-main"><div class="row-t">${esc(c['Название'])}</div>
+        <div class="row-m"><span>${esc(c['Тематика'] || 'без тематики')}</span><span>${c['Статус'] === 'Готово к публикации' ? '<b class="ok-text">готово</b>' : 'идея — доработать'}</span>${gap > 0.05 ? `<span class="warn-text" data-tip="${esc(`Тематика отстаёт от цели на ${num(gap, 0)} процентных пунктов за ${DEFICIT_DAYS} дней`)}" tabindex="0">дефицит ${gapPP(gap)}</span>` : ''}</div></div>
+    </li>`).join('');
+    const want = x.wanted.length ? `, желательно по тематике ${x.wanted.map(w => `«${esc(w.name)}» (${gapPP(w.gap)})`).join(' или ')}` : '';
+    const miss = x.missing > 0 ? `<li class="row todo-miss"><div class="row-main"><div class="row-t">Нет идеи — нужен ещё ${pl(x.missing, CHANNEL_UNIT[x.channel] || ['материал', 'материала', 'материалов'])}</div>
+      <div class="row-m"><span>${esc(CHANNEL_FORMAT[x.channel] || 'материал')}${want}</span></div></div></li>` : '';
+    return `<section class="todo">
+      <header class="todo-h"><span class="todo-tags">${platTags(x)}</span><span class="todo-n">нужно ${pl(x.need, CHANNEL_UNIT[x.channel] || ['материал', 'материала', 'материалов'])}</span></header>
+      <ul class="rows">${ideas}${miss}</ul>
+    </section>`;
+  };
+  const body = open.length ? open.map(block).join('') : `<p class="empty">Все нормы недели закрыты публикациями и планом.</p>`;
+  const done = closed.length ? `<p class="note">Закрыто: ${closed.map(x => x.platforms.map(short).join(' + ')).join(', ')}. Threads — спонтанно, без плана.</p>` : '<p class="note">Threads — спонтанно, без плана.</p>';
+  return card('Что выкладываем', body + done, {aside: open.length ? `<span class="muted">${dRange(a, b)}</span>` : '',
+    tip: `Сколько не хватает до недельной нормы с учётом вышедшего и запланированного, и какие идеи из банка это закрывают.\nСначала идеи «готово», потом тематики с наибольшим дефицитом за ${DEFICIT_DAYS} дней.\nReels и Shorts — один ролик на обе площадки.\nДату назначает ChatGPT по регламенту — напишите, какую идею берёте.`});
+}
+
 // ---------- Обзор ----------
 function overview() {
   const {unit, offset} = state.overview;
@@ -251,6 +281,7 @@ function overview() {
   return `${periodNav('overview')}<div class="layout-2">
     <div class="stack">
       ${card(`План на ${UNITS[unit].acc}`, summary + rows.map(r => r.html).join(''), {tip: notes})}
+      ${unit === 'week' && b >= t ? todoCard(a, b, pubs, plans) : ''}
       ${upcomingCard}
     </div>
     <div class="stack">

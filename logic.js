@@ -148,3 +148,48 @@ export function gains(list) {
   }
   return out;
 }
+
+/** Какой канал закрывает материал: по Целевым площадкам, иначе по Формату. */
+const FORMAT_CHANNEL = {'Короткое видео': 'Короткие видео', 'Текст': 'Telegram', 'Аналитика': 'Telegram', 'Длинное видео': 'YouTube Long'};
+export const ideaChannels = c => c['Целевые площадки']?.length
+  ? [...new Set(c['Целевые площадки'].map(channelOf))]
+  : FORMAT_CHANNEL[c['Формат']] ? [FORMAT_CHANNEL[c['Формат']]] : [];
+
+/**
+ * Что нужно выложить за неделю, чтобы закрыть нормы площадок.
+ * goals — активные цели площадок; pubs / plans — вышедшие и запланированные публикации недели;
+ * allPubs — все публикации (идея, у которой уже есть выход или план, в подборку не идёт);
+ * themes — balance() за 30 дней (gap > 0 — дефицит).
+ * Reels и Shorts — один канал: один ролик кросспостится, поэтому нужно max(недобор Reels, недобор Shorts).
+ * Мусорные площадки (Threads) не планируются. Идеи: сначала «Готово к публикации», затем по дефициту тематики, затем по приоритету.
+ * Возвращает [{channel, platforms, need, ideas: [{c, gap}], missing, wanted: [{name, gap}]}] и закрытые каналы с need = 0.
+ */
+export function weekNeeds({goals, content, pubs, plans, allPubs, themes}) {
+  const byChannel = new Map();
+  for (const g of goals) {
+    if (isTrashPub(g)) continue;
+    const name = g['Площадка'], ch = channelOf(name);
+    const left = g['Целевое количество'] - pubs.filter(p => p['Площадка'] === name).length - plans.filter(p => p['Площадка'] === name).length;
+    const x = byChannel.get(ch) || {channel: ch, platforms: [], need: 0};
+    x.platforms.push(name);
+    x.need = Math.max(x.need, left, 0);
+    byChannel.set(ch, x);
+  }
+  const busy = new Set(allPubs.filter(p => p['Статус'] === 'Опубликовано' || p['Статус'] === 'Запланировано').flatMap(p => p['Материал'] || []));
+  const gap = name => themes.find(t => t.name === name)?.gap ?? 0;
+  const PR = {'Высокий': 0, 'Обычный': 1, 'Низкий': 2};
+  const pool = content.filter(c => c['Статус'] !== 'Опубликовано' && !busy.has(c.id) && !isHiddenTheme(c['Тематика']))
+    .sort((a, b) => (b['Статус'] === 'Готово к публикации') - (a['Статус'] === 'Готово к публикации') || gap(b['Тематика']) - gap(a['Тематика']) || (PR[a['Приоритет']] ?? 1) - (PR[b['Приоритет']] ?? 1));
+  const used = new Set();
+  const wanted = themes.filter(t => t.gap > 0.05 && !isHiddenTheme(t.name)).sort((a, b) => b.gap - a.gap).slice(0, 2).map(t => ({name: t.name, gap: t.gap}));
+  return [...byChannel.values()].map(x => {
+    const ideas = [];
+    for (const c of pool) {
+      if (ideas.length >= x.need) break;
+      if (used.has(c.id) || !ideaChannels(c).includes(x.channel)) continue;
+      used.add(c.id);
+      ideas.push({c, gap: gap(c['Тематика'])});
+    }
+    return {...x, ideas, missing: x.need - ideas.length, wanted};
+  }).sort((a, b) => b.need - a.need);
+}

@@ -97,3 +97,32 @@ console.log('OK');
   assert.deepEqual(themeByChannel(cb, t), {cells: {Y: {Telegram: 1}}, totals: {Telegram: 1}});
   console.log('OK hidden themes');
 }
+
+// Что выкладываем на неделе
+{
+  const {weekNeeds, ideaChannels} = await import('../logic.js');
+  const goals = [{'Площадка': 'Telegram', 'Целевое количество': 2}, {'Площадка': 'Threads', 'Целевое количество': 5}, {'Площадка': 'Instagram Reels', 'Целевое количество': 2}, {'Площадка': 'YouTube Shorts', 'Целевое количество': 2}];
+  const content = [
+    {id: 'v1', 'Статус': 'Идея', 'Формат': 'Короткое видео', 'Тематика': 'A'},
+    {id: 'v2', 'Статус': 'Идея', 'Формат': 'Короткое видео', 'Тематика': 'B'},
+    {id: 'v3', 'Статус': 'Готово к публикации', 'Формат': 'Короткое видео', 'Тематика': 'A'},
+    {id: 't1', 'Статус': 'Идея', 'Формат': 'Текст', 'Тематика': 'B', 'Целевые площадки': ['Telegram']},
+    {id: 't2', 'Статус': 'Идея', 'Формат': 'Текст', 'Тематика': 'Мусор'},
+    {id: 'p', 'Статус': 'Идея', 'Формат': 'Короткое видео', 'Тематика': 'B'},
+  ];
+  const plans = [{'Площадка': 'Instagram Reels', 'Материал': ['p'], 'Статус': 'Запланировано'}, {'Площадка': 'YouTube Shorts', 'Материал': ['p'], 'Статус': 'Запланировано'}];
+  const pubs = [{'Площадка': 'Telegram', 'Материал': ['x'], 'Статус': 'Опубликовано'}];
+  const themes = [{name: 'A', gap: 1}, {name: 'B', gap: 10}];
+  const r = weekNeeds({goals, content, pubs, plans, allPubs: [...pubs, ...plans], themes});
+  const v = r.find(x => x.channel === 'Короткие видео'), tg = r.find(x => x.channel === 'Telegram');
+  assert.equal(r.some(x => x.channel === 'Threads'), false, 'Threads не планируется');
+  assert.equal(v.need, 1, 'план закрыл один ролик на обеих площадках');
+  assert.deepEqual(v.ideas.map(x => x.c.id), ['v3'], 'готовое — первым');
+  assert.equal(tg.need, 1);
+  assert.deepEqual(tg.ideas.map(x => x.c.id), ['t1'], 'мусор не предлагается');
+  const r2 = weekNeeds({goals, content: [], pubs: [], plans: [], allPubs: [], themes});
+  assert.equal(r2.find(x => x.channel === 'Короткие видео').missing, 2);
+  assert.deepEqual(r2[0].wanted.map(x => x.name), ['B', 'A'], 'нужная тематика — по дефициту');
+  assert.deepEqual(ideaChannels({'Формат': 'Текст', 'Целевые площадки': ['Instagram Reels', 'YouTube Shorts']}), ['Короткие видео']);
+  console.log('OK week needs');
+}
