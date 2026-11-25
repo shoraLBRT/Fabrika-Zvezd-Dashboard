@@ -36,7 +36,7 @@ jobs:
         run: node scripts/export.mjs content-os data.json && rm -rf content-os
       - run: |
           mkdir -p site
-          cp index.html style.css app.js logic.js data.json site/
+          cp index.html style.css app.js logic.js data.json favicon.svg apple-touch-icon.png site/
           # Версия в ссылках на файлы, чтобы браузер не показывал старую версию из кэша.
           v=${GITHUB_SHA::8}
           sed -i "s/style\.css\"/style.css?v=$v\"/; s/app\.js\"/app.js?v=$v\"/" site/index.html
