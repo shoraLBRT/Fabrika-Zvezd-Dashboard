@@ -476,36 +476,45 @@ for (const ev of ['pointerover', 'focusin']) document.addEventListener(ev, e => 
 document.addEventListener('pointerout', e => { if (e.target.closest?.('[data-tip]') && !e.relatedTarget?.closest?.('[data-tip]')) hideTip(); });
 addEventListener('scroll', hideTip, {passive: true});
 
-function setTab(t, dir = 0) {
+function setTab(t) {
   if (!TABS[t]) t = 'overview';
   const changed = state.tab !== t;
   state.tab = t;
   if (location.hash.slice(1) !== t) history.replaceState(null, '', '#' + t);
   if (changed) scrollTo(0, 0);
   if (data) render();
-  if (changed) {
-    document.querySelector(`nav [data-tab="${t}"]`)?.scrollIntoView({block: 'nearest', inline: 'nearest'});
-    if (dir) slideIn(dir);
-  }
+  moveInk();
+  if (changed) document.querySelector(`nav [data-tab="${t}"]`)?.scrollIntoView({block: 'nearest', inline: 'nearest'});
 }
 
+// ---------- Подчёркивание активной вкладки ----------
+// Отдельная полоска, чтобы во время свайпа она плавно ехала к соседней вкладке.
+const nav = document.querySelector('nav');
+const ink = Object.assign(document.createElement('i'), {className: 'nav-ink'});
+nav.append(ink);
+const tabBtn = t => nav.querySelector(`[data-tab="${t}"]`);
+/** p — доля пути (0…1) от текущей вкладки к вкладке to. */
+function moveInk(to = null, p = 0, animate = true) {
+  const a = tabBtn(state.tab), b = to ? tabBtn(to) : a;
+  if (!a) return;
+  const lerp = (x, y) => x + (y - x) * p;
+  ink.style.transition = animate ? '' : 'none';
+  ink.style.left = lerp(a.offsetLeft, b.offsetLeft) + 'px';
+  ink.style.width = lerp(a.offsetWidth, b.offsetWidth) + 'px';
+}
+addEventListener('resize', () => moveInk(null, 0, false));
+
 // ---------- Свайпы между вкладками ----------
-// Содержимое едет за пальцем; отпустили дальше четверти экрана (или резким движением) — переход,
-// иначе возвращается на место. На краях (первая/последняя вкладка) — тугое сопротивление.
-// Жест игнорируется, если начат внутри горизонтально прокручиваемого блока.
+// Как карусель: соседняя вкладка рисуется заранее и въезжает рядом с текущей, следом за пальцем.
+// Отпустили дальше четверти экрана (или резким движением) — переход, иначе всё возвращается.
+// На краях (первая/последняя вкладка) — тугое сопротивление. Жест игнорируется,
+// если начат внутри горизонтально прокручиваемого блока.
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const EASE = 'cubic-bezier(.2,.7,.3,1)';
-const setX = (x, op = 1, ms = 0) => {
-  app.style.transition = ms ? `transform ${ms}ms ${EASE}, opacity ${ms}ms ${EASE}` : 'none';
-  app.style.transform = x ? `translateX(${x}px)` : '';
-  app.style.opacity = op < 1 ? op : '';
+const shift = (el, x, ms = 0) => {
+  el.style.transition = ms ? `transform ${ms}ms ${EASE}` : 'none';
+  el.style.transform = x ? `translateX(${x}px)` : '';
 };
-function slideIn(dir) {
-  if (reduceMotion.matches) return setX(0);
-  setX(dir * innerWidth * 0.3, 0);
-  void app.offsetWidth;
-  setX(0, 1, 260);
-}
 const scrollsX = el => {
   for (; el && el !== document.body; el = el.parentElement) {
     const ox = getComputedStyle(el).overflowX;
@@ -514,16 +523,36 @@ const scrollsX = el => {
   return false;
 };
 const neighbour = dir => { const keys = Object.keys(TABS); return keys[keys.indexOf(state.tab) + dir]; };
-const peek = t => document.querySelectorAll('nav [data-tab]').forEach(b => b.classList.toggle('peek', b.dataset.tab === t));
+
+let ghost = null; // соседняя вкладка во время свайпа
+function showGhost(t) {
+  if (!ghost) {
+    ghost = document.createElement('main');
+    ghost.className = 'ghost';
+    ghost.setAttribute('aria-hidden', 'true');
+    app.after(ghost);
+  }
+  if (ghost.dataset.tab !== t) {
+    // Закреплён на экране там, где окажется #app после перехода (прокрутка сбросится наверх, шапка липкая).
+    // position: fixed — чтобы вынесенный за край экрана призрак не расширял страницу.
+    const r = app.getBoundingClientRect();
+    Object.assign(ghost.style, {left: r.left + 'px', width: r.width + 'px', top: r.top + scrollY + 'px'});
+    ghost.innerHTML = ({overview, content, analytics, series}[t])();
+    ghost.dataset.tab = t;
+  }
+}
+const dropGhost = () => { ghost?.remove(); ghost = null; };
+
 let swipe = null;
 document.addEventListener('touchstart', e => {
+  if (!data || ghost) return;
   const t = e.touches[0];
   swipe = e.touches.length === 1 && !scrollsX(e.target) && !e.target.closest('input, select, textarea')
-    ? {x: t.clientX, y: t.clientY, at: Date.now(), lock: null, dx: 0} : null;
+    ? {x: t.clientX, y: t.clientY, at: Date.now(), lock: null, dx: 0, W: document.documentElement.clientWidth} : null;
 }, {passive: true});
 document.addEventListener('touchmove', e => {
   if (!swipe) return;
-  if (e.touches.length > 1) { if (swipe.lock === 'x') setX(0, 1, 200); swipe = null; return; }
+  if (e.touches.length > 1) return endSwipe(true);
   const t = e.touches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
   if (!swipe.lock) {
     if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
@@ -533,23 +562,34 @@ document.addEventListener('touchmove', e => {
   if (swipe.lock !== 'x') return;
   e.preventDefault(); // не даём странице скроллиться, пока тянем вбок
   swipe.dx = dx;
-  const target = neighbour(dx < 0 ? 1 : -1);
-  const x = target ? dx : dx / 4; // на краю — сопротивление
-  setX(x, 1 - Math.min(Math.abs(x) / innerWidth, 1) * 0.5);
-  peek(target && Math.abs(dx) > innerWidth * 0.25 ? target : null);
+  const dir = dx < 0 ? 1 : -1, target = neighbour(dir), W = swipe.W;
+  if (!target) { dropGhost(); shift(app, dx / 4); moveInk(null, 0, false); return; } // край — сопротивление
+  showGhost(target);
+  shift(app, dx);
+  shift(ghost, dx + dir * W);
+  moveInk(target, Math.min(Math.abs(dx) / W, 1), false);
 }, {passive: false});
-const endSwipe = cancelled => {
+function endSwipe(cancelled) {
   if (!swipe) return;
-  const {dx, at, lock} = swipe;
-  swipe = null; peek(null);
+  const {dx, at, lock, W} = swipe;
+  swipe = null;
   if (lock !== 'x') return;
   const dir = dx < 0 ? 1 : -1, target = neighbour(dir);
   const fast = Math.abs(dx) / (Date.now() - at) > 0.5 && Math.abs(dx) > 40;
-  if (cancelled || !target || !(Math.abs(dx) > innerWidth * 0.25 || fast)) return setX(0, 1, 220);
-  if (reduceMotion.matches) return setTab(target);
-  setX(-dir * innerWidth, 0, 160);
-  setTimeout(() => setTab(target, dir), 160);
-};
+  const go = !cancelled && target && ghost && (Math.abs(dx) > W * 0.25 || fast);
+  const ms = reduceMotion.matches ? 0 : go ? 240 : 220;
+  shift(app, go ? -dir * W : 0, ms);
+  if (ghost) shift(ghost, go ? 0 : dir * W, ms);
+  moveInk(go ? target : null, go ? 1 : 0, true);
+  const finish = () => {
+    if (go) { // подмена за один кадр: в #app то же самое, что уже видно в призраке
+      shift(app, 0);
+      setTab(target);
+    }
+    dropGhost();
+  };
+  ms ? setTimeout(finish, ms) : finish();
+}
 document.addEventListener('touchend', () => endSwipe(false), {passive: true});
 document.addEventListener('touchcancel', () => endSwipe(true), {passive: true});
 document.querySelectorAll('nav [data-tab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));

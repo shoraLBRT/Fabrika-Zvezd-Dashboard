@@ -250,7 +250,10 @@ nav button[aria-current="page"] { color: var(--accent); border-bottom-color: var
 }
 
 /* Свайпы между вкладками */
-nav [data-tab].peek { color: var(--accent); }
+.ghost { position: fixed; bottom: 0; z-index: 1; overflow: hidden; margin: 0; max-width: none; pointer-events: none; background: var(--bg); }
+nav { position: relative; }
+nav button[aria-current="page"] { border-bottom-color: transparent; }
+.nav-ink { position: absolute; bottom: 0; left: 0; width: 0; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; transition: left .25s cubic-bezier(.2,.7,.3,1), width .25s cubic-bezier(.2,.7,.3,1); pointer-events: none; }
 body { overflow-x: hidden; }
 
 /* Подсказки ⓘ */
