@@ -306,12 +306,3 @@ a.plain:hover { color: var(--accent); }
 .row-t.muted a.plain { color: var(--text-2); }
 @media (max-width: 520px) { .stat-v { font-size: 21px; } }
 
-/* Что выкладываем */
-.todo + .todo { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
-.todo-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.todo-tags { display: flex; gap: 4px; flex-wrap: wrap; }
-.todo-n { font-size: 12px; font-weight: 600; color: var(--text-2); }
-.todo-miss { background: var(--warn-soft); border-radius: 8px; padding: 8px 10px; margin-top: 4px; }
-.todo-miss .row-t { color: var(--warn); }
-.row + .todo-miss { border-top: 0; }
-.ok-text { color: var(--good); font-weight: 600; }
