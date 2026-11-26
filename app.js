@@ -214,8 +214,8 @@ function overview() {
     const done = n >= target, need = target - n - m;
     const status = done ? '<span class="badge good">✓ выполнено</span>'
       : isPast ? `<span class="badge warn">не хватило ${target - n}</span>`
-      : need <= 0 ? '<span class="badge plan">закрыто планом</span>'
-      : `<span class="badge neutral">${m ? 'добрать' : 'осталось'} ${need}</span>`;
+      : need <= 0 ? '<span class="badge plan" data-tip="Всё нужное запланировано, но ещё не вышло: контент надо подготовить и опубликовать" tabindex="0">ожидает публикации</span>'
+      : `<span class="badge neutral" data-tip="${esc(m ? `Запланировано ${m}, для нормы нужно запланировать ещё ${need}` : `Ничего не запланировано, для нормы нужно ${need}`)}" tabindex="0">${m ? 'нужно ещё' : 'нужно'} ${need}</span>`;
     return {done, html: `<div class="plan-row">
       <div class="plan-name">${dot(name)}${esc(name)}</div>
       <div class="plan-bar">${meter(n, 0, Math.max(n + m, target), {cls: 'thick', ok: false, fill: pcls(name), plan: m, label: `${name}: вышло ${n}, в плане ${m}, цель ${target}`})}</div>
