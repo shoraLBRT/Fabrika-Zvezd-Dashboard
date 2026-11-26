@@ -219,7 +219,7 @@ function overview() {
     return {done, html: `<div class="plan-row">
       <div class="plan-name">${dot(name)}${esc(name)}</div>
       <div class="plan-bar">${meter(n, 0, Math.max(n + m, target), {cls: 'thick', ok: false, fill: pcls(name), plan: m, label: `${name}: вышло ${n}, в плане ${m}, цель ${target}`})}</div>
-      <div class="plan-n"><b>${n}</b> из ${target}${m ? `<small>+${m} в плане</small>` : ''}</div>
+      <div class="plan-n"><b>${n}</b> из ${target}${m ? `<small>${m} в плане</small>` : ''}</div>
       <div class="plan-s">${status}</div>
     </div>`};
   });
